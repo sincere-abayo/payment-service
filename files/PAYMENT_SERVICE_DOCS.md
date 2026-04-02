@@ -2,7 +2,7 @@
 
 > Complete technical reference for backend engineers working on the command-based NestJS payment service.
 
-> Implementation status (April 2026): Auth, Admin tenant-management, and disbursement batch intake/status lookup are implemented. Queue worker, MTN callback receiver, and outbound tenant webhooks are planned and documented as next phase.
+> Implementation status (April 2026): Auth, Admin tenant-management, disbursement batch intake/status, queue worker processing, MTN callback receiver, and outbound tenant webhooks are implemented. MTN transfer execution is currently stubbed and will be replaced with full provider integration next.
 
 ---
 
@@ -77,17 +77,17 @@ Command Handler (inside feature module)
   ├── [Auth]        ADM_LOGIN_*, ADM_VERIFY2FA_*
   ├── [Admin]       ADM_REGTNT_*, ADM_GETTNT_*, ADM_UPDTNT_*, ADM_APPROV_*, ADM_REVTNT_*, ADM_GENKEY_*, ADM_REVKEY_*, ADM_REGKEY_*
   ├── [Tenant]      (planned next phase)
-  └── [Disbursement] (planned next phase)
+  └── [Disbursement] DSB_INIT_*, DSB_STATUS_*
         │
         ▼
-    DisbursementService (planned)
+    DisbursementService
         │
         ├── Store batch in DB (status: PENDING)
         ├── Create 6 DisbursementJob rows (5 payouts + 1 charge)
         └── Enqueue all 6 jobs → BullMQ
               │
               ▼
-          DisbursementProcessor (Worker, planned)
+          DisbursementProcessor (Worker)
               │
               ├── Pick job from queue
               ├── Call MtnService.transfer(phone, amount)
@@ -95,7 +95,7 @@ Command Handler (inside feature module)
               └── Update job status → trigger WebhookService
                         │
                         ▼
-                  WebhookService (planned)
+                  WebhookService
                         │
                         ├── Build payload { batch, jobs[] }
                         ├── POST to tenant webhookUrl
@@ -115,8 +115,8 @@ AppModule
   ├── AuthModule      → MasterModule, PrismaModule, JwtModule
   ├── AdminModule     → MasterModule, PrismaModule
   ├── TenantModule    → scaffold only (planned next phase)
-  ├── DisbursementModule → scaffold only (planned next phase)
-  ├── WebhookModule   → scaffold only (planned next phase)
+  ├── DisbursementModule → MasterModule, PrismaModule, QueueModule, MtnModule, WebhookModule
+  ├── WebhookModule   → PrismaModule
   └── MasterModule    ← (loaded last)
 ```
 
@@ -783,7 +783,7 @@ Disbursement batch intake and status lookup are live in the current runtime. Ten
 
 ## 10. Disbursement Flow
 
-> Status: batch intake and status lookup are live. Queue workers, MTN callbacks, and webhook delivery remain next phase.
+> Status: live. Batch intake, queue processing, callback updates, and webhook delivery are implemented.
 
 ### Step-by-step
 
@@ -846,7 +846,7 @@ if (recipientTotal !== payload.totalAmount) {
 
 ## 11. Queue & Worker System
 
-> Status: planned next phase. Not implemented in runtime yet.
+> Status: live. Queue registration and processor execution are implemented.
 
 ### Queue setup
 
@@ -910,7 +910,7 @@ import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 
 ## 12. Webhook & Callback System
 
-> Status: planned next phase. Not implemented in runtime yet.
+> Status: live. `/mtn-callback` endpoint and webhook dispatch persistence are implemented.
 
 ### MTN callback endpoint
 
@@ -981,7 +981,7 @@ The tenant app must respond with HTTP `200` to acknowledge receipt. Any other st
 
 ## 13. MTN MoMo Integration
 
-> Status: planned next phase. Not implemented in runtime yet.
+> Status: partial. Current transfer call is a service stub; full MTN API/token integration is next.
 
 ### API flow
 
@@ -1372,9 +1372,9 @@ if (res.data.preAuthToken) {
 10. DSB_STATUS_4E5F       → poll status
 
 Planned next-phase flow:
-11. webhook callback      → tenant receives completion event
+11. webhook callback      → tenant receives completion event (auto-dispatched when batch reaches terminal states)
 ```
 
 ---
 
-_Last updated: April 2026 — scope aligned with current implementation (Auth + Admin + disbursement intake/status live, Tenant planned)._
+_Last updated: April 2026 — scope aligned with current implementation (Auth + Admin + disbursement processing/callback/webhook live; tenant commands and full MTN API integration planned)._

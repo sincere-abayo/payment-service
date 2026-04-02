@@ -6,7 +6,10 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { BatchStatus, JobType, JobStatus } from '@prisma/client';
-import { DISBURSEMENT_QUEUE } from '../queue/queue.module';
+import {
+  DISBURSEMENT_QUEUE,
+  JOB_PROCESS_TRANSFER,
+} from '../queue/queue.module';
 import { PrismaService } from '../prisma/prisma.service';
 
 type RecipientInput = {
@@ -60,74 +63,83 @@ export class DisbursementService {
         },
       });
 
-      const createdJobs = await tx.disbursementJob.createMany({
-        data: [
-          ...recipients.map((recipient) => ({
+      const queuedJobs: Array<{
+        jobId: string;
+        batchId: string;
+        tenantId: string;
+        userPseudoId: string;
+        phone: string;
+        amount: number;
+        jobType: JobType;
+      }> = [];
+
+      for (const recipient of recipients) {
+        const createdJob = await tx.disbursementJob.create({
+          data: {
             batchId: createdBatch.id,
             phone: recipient.phone,
             amount: recipient.amount,
             jobType: JobType.PAYOUT,
             status: JobStatus.QUEUED,
-          })),
-          {
-            batchId: createdBatch.id,
-            phone: chargeReceiver,
-            amount: totalCharges,
-            jobType: JobType.CHARGE,
-            status: JobStatus.QUEUED,
           },
-        ],
+        });
+
+        queuedJobs.push({
+          jobId: createdJob.id,
+          batchId: createdBatch.id,
+          tenantId,
+          userPseudoId,
+          phone: recipient.phone,
+          amount: recipient.amount,
+          jobType: JobType.PAYOUT,
+        });
+      }
+
+      const chargeJob = await tx.disbursementJob.create({
+        data: {
+          batchId: createdBatch.id,
+          phone: chargeReceiver,
+          amount: totalCharges,
+          jobType: JobType.CHARGE,
+          status: JobStatus.QUEUED,
+        },
       });
 
-      return {
-        batch: createdBatch,
-        jobCount: createdJobs.count,
-      };
-    });
-
-    await Promise.all(
-      recipients.map((recipient) =>
-        this.disbursementQueue.add(
-          'process-transfer',
-          {
-            tenantId,
-            batchId: batch.batch.id,
-            userPseudoId,
-            phone: recipient.phone,
-            amount: recipient.amount,
-            jobType: JobType.PAYOUT,
-          },
-          {
-            attempts: 3,
-            removeOnComplete: { count: 100 },
-            removeOnFail: { count: 50 },
-          },
-        ),
-      ),
-    );
-
-    await this.disbursementQueue.add(
-      'process-transfer',
-      {
+      queuedJobs.push({
+        jobId: chargeJob.id,
+        batchId: createdBatch.id,
         tenantId,
-        batchId: batch.batch.id,
         userPseudoId,
         phone: chargeReceiver,
         amount: totalCharges,
         jobType: JobType.CHARGE,
-      },
-      {
-        attempts: 3,
-        removeOnComplete: { count: 100 },
-        removeOnFail: { count: 50 },
-      },
+      });
+
+      return {
+        batch: createdBatch,
+        queuedJobs,
+      };
+    });
+
+    await Promise.all(
+      batch.queuedJobs.map((queuedJob) =>
+        this.disbursementQueue.add(JOB_PROCESS_TRANSFER, queuedJob, {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+          removeOnComplete: { count: 100 },
+          removeOnFail: { count: 50 },
+        }),
+      ),
     );
 
     return {
       batchId: batch.batch.id,
       status: batch.batch.status,
-      jobCount: batch.jobCount,
-      message: `Batch accepted. ${batch.jobCount} jobs queued (${recipients.length} payouts + 1 charge).`,
+      jobCount: batch.queuedJobs.length,
+      message: `Batch accepted. ${batch.queuedJobs.length} jobs queued (${recipients.length} payouts + 1 charge).`,
     };
   }
 
@@ -183,14 +195,6 @@ export class DisbursementService {
   private requirePositiveInteger(value: unknown, fieldName: string): number {
     if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
       throw new BadRequestException(`${fieldName} must be a positive integer`);
-    }
-
-    return value;
-  }
-
-  private requireNonNegativeInteger(value: unknown, fieldName: string): number {
-    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-      throw new BadRequestException(`${fieldName} must be a non-negative integer`);
     }
 
     return value;
