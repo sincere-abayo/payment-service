@@ -12,7 +12,7 @@ function stringifyJson(value) {
 
 function commandGroupFor(code) {
   if (/^ADM_(LOGIN|VERIFY2FA|SETUP2FA|CONFIRM2FA)/.test(code)) return 'Auth';
-  if (/^ADM_(REGTNT|APPROV|SUSPTNT|REVTNT|GENKEY|REVKEY)/.test(code)) return 'Admin';
+  if (/^ADM_(REGTNT|GETTNT|UPDTNT|APPROV|SUSPTNT|REVTNT|GENKEY|REVKEY|REGKEY)/.test(code)) return 'Admin';
   return 'Commands';
 }
 
@@ -22,7 +22,8 @@ function requestHeadersFor(commandCode) {
     { key: 'x-command', value: commandCode },
   ];
 
-  if (/^ADM_(REGTNT|APPROV|SUSPTNT|REVTNT|GENKEY|REVKEY)/.test(commandCode)) {
+  const publicCommands = new Set(['ADM_LOGIN_1A2B', 'ADM_VERIFY2FA_2C3D']);
+  if (commandCode.startsWith('ADM_') && !publicCommands.has(commandCode)) {
     headers.push({ key: 'Authorization', value: 'Bearer {{adminAccessToken}}' });
   }
 

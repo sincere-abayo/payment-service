@@ -30,6 +30,28 @@ export class AdminCommands implements OnModuleInit {
     });
 
     this.registry.register({
+      code: 'ADM_GETTNT_2A3B',
+      description: 'Get tenant details with API key metadata.',
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (payload, context) => {
+        return this.adminService.getTenantWithApiKeys(context.adminId!, payload.tenantId);
+      },
+    });
+
+    this.registry.register({
+      code: 'ADM_UPDTNT_4C5D',
+      description: 'Update tenant profile data.',
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (payload, context) => {
+        return this.adminService.updateTenant(context.adminId!, payload.tenantId, payload);
+      },
+    });
+
+    this.registry.register({
       code: 'ADM_APPROV_6K7L',
       description: 'Approve a pending tenant.',
       roles: [Role.ADMIN],
@@ -91,6 +113,21 @@ export class AdminCommands implements OnModuleInit {
         return this.adminService.revokeApiKey(
           context.adminId!,
           payload.apiKeyId,
+          payload.reason,
+        );
+      },
+    });
+
+    this.registry.register({
+      code: 'ADM_REGKEY_6E7F',
+      description: 'Regenerate tenant API key (revokes active key and creates a new one).',
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (payload, context) => {
+        return this.adminService.regenerateApiKey(
+          context.adminId!,
+          payload.tenantId,
           payload.reason,
         );
       },

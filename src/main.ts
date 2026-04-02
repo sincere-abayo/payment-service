@@ -28,6 +28,16 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
     name: 'Acme Finance',
     email: 'ops@acme.example',
     webhookUrl: 'https://acme.example/momo/callback',
+    status: 'APPROVE',
+  },
+  ADM_GETTNT_2A3B: {
+    tenantId: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
+  },
+  ADM_UPDTNT_4C5D: {
+    tenantId: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
+    name: 'Acme Finance Rwanda',
+    webhookUrl: 'https://acme.example/momo/new-callback',
+    status: 'ACTIVE',
   },
   ADM_APPROV_6K7L: {
     tenantId: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
@@ -46,6 +56,10 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
   ADM_REVKEY_1S2T: {
     apiKeyId: '2f88951a-cfad-46d8-bbb9-6753cf925554',
     reason: 'Key rotation',
+  },
+  ADM_REGKEY_6E7F: {
+    tenantId: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
+    reason: 'Routine key rotation',
   },
 };
 
@@ -69,9 +83,35 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
     name: 'Acme Finance',
     email: 'ops@acme.example',
     webhookUrl: 'https://acme.example/momo/callback',
-    status: 'PENDING',
+    status: 'ACTIVE',
     createdAt: '2026-04-02T16:14:29.000Z',
     updatedAt: '2026-04-02T16:14:29.000Z',
+  },
+  ADM_GETTNT_2A3B: {
+    id: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
+    name: 'Acme Finance',
+    email: 'ops@acme.example',
+    webhookUrl: 'https://acme.example/momo/callback',
+    status: 'ACTIVE',
+    createdAt: '2026-04-02T16:14:29.000Z',
+    updatedAt: '2026-04-02T16:18:20.000Z',
+    apiKeys: [
+      {
+        id: '2f88951a-cfad-46d8-bbb9-6753cf925554',
+        status: 'ACTIVE',
+        createdAt: '2026-04-02T16:18:20.000Z',
+        revokedAt: null,
+      },
+    ],
+  },
+  ADM_UPDTNT_4C5D: {
+    id: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
+    name: 'Acme Finance Rwanda',
+    email: 'ops@acme.example',
+    webhookUrl: 'https://acme.example/momo/new-callback',
+    status: 'ACTIVE',
+    createdAt: '2026-04-02T16:14:29.000Z',
+    updatedAt: '2026-04-02T16:18:20.000Z',
   },
   ADM_APPROV_6K7L: {
     id: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
@@ -98,6 +138,12 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
     id: '2f88951a-cfad-46d8-bbb9-6753cf925554',
     status: 'REVOKED',
     revokedAt: '2026-04-02T16:19:10.000Z',
+  },
+  ADM_REGKEY_6E7F: {
+    apiKeyId: 'c6357cbc-cbe2-4f88-9a7a-5d831e8b5d9a',
+    tenantId: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
+    rawApiKey: 'momo_08b6d820a79824f65b58e3b41436fadf9d7806f6583fdcfadfdcc2e09ce7dc59',
+    createdAt: '2026-04-02T16:20:20.000Z',
   },
 };
 

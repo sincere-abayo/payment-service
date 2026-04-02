@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
+import { TenantStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -12,13 +13,16 @@ export class AdminService {
 
   async registerTenant(
     adminId: string,
-    payload: { name: string; email: string; webhookUrl?: string },
+    payload: { name: string; email: string; webhookUrl?: string; status?: string },
   ) {
+    const status = this.normalizeTenantStatus(payload.status);
+
     const tenant = await this.prisma.tenantApp.create({
       data: {
         name: payload.name,
         email: payload.email,
         webhookUrl: payload.webhookUrl,
+        status,
       },
     });
 
@@ -30,6 +34,83 @@ export class AdminService {
     });
 
     return tenant;
+  }
+
+  async getTenantWithApiKeys(adminId: string, tenantId: string) {
+    const tenant = await this.prisma.tenantApp.findUnique({
+      where: { id: tenantId },
+      include: {
+        apiKeys: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            revokedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    await this.logAction(adminId, {
+      action: 'VIEWED_TENANT',
+      targetType: 'TenantApp',
+      targetId: tenantId,
+    });
+
+    return tenant;
+  }
+
+  async updateTenant(
+    adminId: string,
+    tenantId: string,
+    payload: { name?: string; email?: string; webhookUrl?: string | null; status?: string },
+  ) {
+    const tenant = await this.prisma.tenantApp.findUnique({ where: { id: tenantId } });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    const data: {
+      name?: string;
+      email?: string;
+      webhookUrl?: string | null;
+      status?: TenantStatus;
+    } = {};
+
+    if (payload.name !== undefined) {
+      data.name = payload.name;
+    }
+    if (payload.email !== undefined) {
+      data.email = payload.email;
+    }
+    if (payload.webhookUrl !== undefined) {
+      data.webhookUrl = payload.webhookUrl;
+    }
+    if (payload.status !== undefined) {
+      data.status = this.normalizeTenantStatus(payload.status);
+    }
+
+    if (!Object.keys(data).length) {
+      throw new BadRequestException('No fields provided for update');
+    }
+
+    const updated = await this.prisma.tenantApp.update({
+      where: { id: tenantId },
+      data,
+    });
+
+    await this.logAction(adminId, {
+      action: 'UPDATED_TENANT',
+      targetType: 'TenantApp',
+      targetId: tenantId,
+    });
+
+    return updated;
   }
 
   async approveTenant(adminId: string, tenantId: string) {
@@ -160,6 +241,61 @@ export class AdminService {
     });
 
     return updated;
+  }
+
+  async regenerateApiKey(adminId: string, tenantId: string, reason?: string) {
+    const tenant = await this.prisma.tenantApp.findUnique({ where: { id: tenantId } });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    if (tenant.status !== 'ACTIVE') {
+      throw new BadRequestException('Tenant must be ACTIVE to regenerate API key');
+    }
+
+    await this.prisma.apiKey.updateMany({
+      where: {
+        tenantId,
+        status: 'ACTIVE',
+      },
+      data: {
+        status: 'REVOKED',
+        revokedAt: new Date(),
+      },
+    });
+
+    const generated = await this.generateApiKey(adminId, tenantId);
+
+    await this.logAction(adminId, {
+      action: 'REGENERATED_API_KEY',
+      targetType: 'TenantApp',
+      targetId: tenantId,
+      note: reason,
+    });
+
+    return generated;
+  }
+
+  private normalizeTenantStatus(status?: string): TenantStatus {
+    if (!status) {
+      return 'PENDING';
+    }
+
+    const normalized = status.trim().toUpperCase();
+
+    // Allow admin UX aliases.
+    if (normalized === 'APPROVE' || normalized === 'APPROVED') {
+      return 'ACTIVE';
+    }
+
+    const valid = ['PENDING', 'ACTIVE', 'SUSPENDED', 'REVOKED'];
+    if (!valid.includes(normalized)) {
+      throw new BadRequestException(
+        `Invalid status. Expected one of: ${valid.join(', ')}`,
+      );
+    }
+
+    return normalized as TenantStatus;
   }
 
   private createRawApiKey(): string {

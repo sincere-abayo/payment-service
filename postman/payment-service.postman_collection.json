@@ -8,7 +8,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:3000"
+      "value": "http://localhost:3016"
     },
     {
       "key": "adminEmail",
@@ -228,6 +228,184 @@
           ]
         },
         {
+          "name": "ADM_GETTNT_2A3B",
+          "request": {
+            "description": "Get tenant details with API key metadata.",
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-command",
+                "value": "ADM_GETTNT_2A3B"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"f61adb55-62ce-4221-8630-883c3a8bda4e\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "x-command",
+                    "value": "ADM_GETTNT_2A3B"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": []
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"command\": \"ADM_GETTNT_2A3B\",\n  \"data\": {\n    \"id\": \"f61adb55-62ce-4221-8630-883c3a8bda4e\",\n    \"name\": \"Acme Finance\",\n    \"email\": \"ops@acme.example\",\n    \"webhookUrl\": \"https://acme.example/momo/callback\",\n    \"status\": \"ACTIVE\",\n    \"createdAt\": \"2026-04-02T16:14:29.000Z\",\n    \"updatedAt\": \"2026-04-02T16:18:20.000Z\",\n    \"apiKeys\": [\n      {\n        \"id\": \"2f88951a-cfad-46d8-bbb9-6753cf925554\",\n        \"status\": \"ACTIVE\",\n        \"createdAt\": \"2026-04-02T16:18:20.000Z\",\n        \"revokedAt\": null\n      }\n    ]\n  },\n  \"timestamp\": \"2026-04-02T16:20:00.000Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('request succeeded', function () {",
+                  "  pm.expect(json.success).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ADM_REGKEY_6E7F",
+          "request": {
+            "description": "Regenerate tenant API key (revokes active key and creates a new one).",
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-command",
+                "value": "ADM_REGKEY_6E7F"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"f61adb55-62ce-4221-8630-883c3a8bda4e\",\n  \"reason\": \"Routine key rotation\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "x-command",
+                    "value": "ADM_REGKEY_6E7F"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": []
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"command\": \"ADM_REGKEY_6E7F\",\n  \"data\": {\n    \"apiKeyId\": \"c6357cbc-cbe2-4f88-9a7a-5d831e8b5d9a\",\n    \"tenantId\": \"f61adb55-62ce-4221-8630-883c3a8bda4e\",\n    \"rawApiKey\": \"momo_08b6d820a79824f65b58e3b41436fadf9d7806f6583fdcfadfdcc2e09ce7dc59\",\n    \"createdAt\": \"2026-04-02T16:20:20.000Z\"\n  },\n  \"timestamp\": \"2026-04-02T16:20:00.000Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('request succeeded', function () {",
+                  "  pm.expect(json.success).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "ADM_REGTNT_5I6J",
           "request": {
             "description": "Register a new tenant app.",
@@ -255,7 +433,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Acme Finance\",\n  \"email\": \"ops@acme.example\",\n  \"webhookUrl\": \"https://acme.example/momo/callback\"\n}",
+              "raw": "{\n  \"name\": \"Acme Finance\",\n  \"email\": \"ops@acme.example\",\n  \"webhookUrl\": \"https://acme.example/momo/callback\",\n  \"status\": \"APPROVE\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -298,7 +476,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"success\": true,\n  \"command\": \"ADM_REGTNT_5I6J\",\n  \"data\": {\n    \"id\": \"f61adb55-62ce-4221-8630-883c3a8bda4e\",\n    \"name\": \"Acme Finance\",\n    \"email\": \"ops@acme.example\",\n    \"webhookUrl\": \"https://acme.example/momo/callback\",\n    \"status\": \"PENDING\",\n    \"createdAt\": \"2026-04-02T16:14:29.000Z\",\n    \"updatedAt\": \"2026-04-02T16:14:29.000Z\"\n  },\n  \"timestamp\": \"2026-04-02T16:20:00.000Z\"\n}"
+              "body": "{\n  \"success\": true,\n  \"command\": \"ADM_REGTNT_5I6J\",\n  \"data\": {\n    \"id\": \"f61adb55-62ce-4221-8630-883c3a8bda4e\",\n    \"name\": \"Acme Finance\",\n    \"email\": \"ops@acme.example\",\n    \"webhookUrl\": \"https://acme.example/momo/callback\",\n    \"status\": \"ACTIVE\",\n    \"createdAt\": \"2026-04-02T16:14:29.000Z\",\n    \"updatedAt\": \"2026-04-02T16:14:29.000Z\"\n  },\n  \"timestamp\": \"2026-04-02T16:20:00.000Z\"\n}"
             }
           ],
           "event": [
@@ -585,6 +763,95 @@
               }
             }
           ]
+        },
+        {
+          "name": "ADM_UPDTNT_4C5D",
+          "request": {
+            "description": "Update tenant profile data.",
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-command",
+                "value": "ADM_UPDTNT_4C5D"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"f61adb55-62ce-4221-8630-883c3a8bda4e\",\n  \"name\": \"Acme Finance Rwanda\",\n  \"webhookUrl\": \"https://acme.example/momo/new-callback\",\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "x-command",
+                    "value": "ADM_UPDTNT_4C5D"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": []
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"command\": \"ADM_UPDTNT_4C5D\",\n  \"data\": {\n    \"id\": \"f61adb55-62ce-4221-8630-883c3a8bda4e\",\n    \"name\": \"Acme Finance Rwanda\",\n    \"email\": \"ops@acme.example\",\n    \"webhookUrl\": \"https://acme.example/momo/new-callback\",\n    \"status\": \"ACTIVE\",\n    \"createdAt\": \"2026-04-02T16:14:29.000Z\",\n    \"updatedAt\": \"2026-04-02T16:18:20.000Z\"\n  },\n  \"timestamp\": \"2026-04-02T16:20:00.000Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('request succeeded', function () {",
+                  "  pm.expect(json.success).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -604,6 +871,10 @@
               {
                 "key": "x-command",
                 "value": "ADM_CONFIRM2FA_4G5H"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
               }
             ],
             "url": {
@@ -636,6 +907,10 @@
                   {
                     "key": "x-command",
                     "value": "ADM_CONFIRM2FA_4G5H"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}"
                   }
                 ],
                 "url": {
@@ -772,6 +1047,10 @@
               {
                 "key": "x-command",
                 "value": "ADM_SETUP2FA_3E4F"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
               }
             ],
             "url": {
@@ -804,6 +1083,10 @@
                   {
                     "key": "x-command",
                     "value": "ADM_SETUP2FA_3E4F"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}"
                   }
                 ],
                 "url": {
