@@ -27,7 +27,7 @@ export class MasterController {
   @Throttle({ default: { ttl: 60000, limit: 60 } })
   @ApiBearerAuth()
   @ApiHeader({ name: 'x-command', required: true, description: 'Command code e.g. ADM_LOGIN_1A2B' })
-  @ApiHeader({ name: 'x-api-key', required: false, description: 'Tenant API key for protected commands' })
+  @ApiHeader({ name: 'x-api-key', required: true, description: 'Common service API key from COMMON_X_API_KEY' })
   @ApiOperation({ summary: 'Single command endpoint for all API requests' })
   async handle(
     @Headers('x-command') commandCode: string,
@@ -43,7 +43,7 @@ export class MasterController {
     req: Request,
   ) {
     if (!commandCode) {
-      throw new BadRequestException('Missing x-command header or commandCode path param');
+      throw new BadRequestException('Missing x-command header');
     }
 
     const command = this.registry.resolve(commandCode.trim().toUpperCase());

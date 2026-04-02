@@ -20,6 +20,7 @@ function requestHeadersFor(commandCode) {
   const headers = [
     { key: 'Content-Type', value: 'application/json' },
     { key: 'x-command', value: commandCode },
+    { key: 'x-api-key', value: '{{serviceApiKey}}' },
   ];
 
   const publicCommands = new Set(['ADM_LOGIN_1A2B', 'ADM_VERIFY2FA_2C3D']);
@@ -172,6 +173,7 @@ function buildCollection(doc) {
     },
     variable: [
       { key: 'baseUrl', value: baseUrl },
+      { key: 'serviceApiKey', value: '1223qwe123' },
       { key: 'adminEmail', value: 'admin@example.com' },
       { key: 'adminPassword', value: 'StrongPassword123!' },
       { key: 'adminAccessToken', value: '' },
@@ -198,6 +200,7 @@ async function main() {
     name: 'Payment Service Local',
     values: [
       { key: 'baseUrl', value: baseUrl, type: 'default', enabled: true },
+      { key: 'serviceApiKey', value: '1223qwe123', type: 'default', enabled: true },
       { key: 'adminEmail', value: 'admin@example.com', type: 'default', enabled: true },
       { key: 'adminPassword', value: 'StrongPassword123!', type: 'default', enabled: true },
       { key: 'adminAccessToken', value: '', type: 'default', enabled: true },

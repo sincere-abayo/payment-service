@@ -280,7 +280,7 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle('MTN MoMo Disbursement API')
       .setDescription(
-        'Command-first API documentation. Use POST / with x-command and x-api-key headers, and pick the command-specific request/response example.',
+        'Command-first API documentation. Use POST / with x-command and the common x-api-key header (COMMON_X_API_KEY), then pick the command-specific request/response example.',
       )
       .setVersion('1.0')
       .addTag('Master', 'Single command dispatcher')

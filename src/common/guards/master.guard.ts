@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  InternalServerErrorException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -38,6 +39,8 @@ export class MasterGuard implements CanActivate {
     } catch {
       return true;
     }
+
+    this.validateCommonApiKey(req);
 
     if (command.requiresJwt) {
       const token = this.extractBearer(req);
@@ -101,6 +104,22 @@ export class MasterGuard implements CanActivate {
     }
 
     return auth.slice(7);
+  }
+
+  private validateCommonApiKey(req: Request): void {
+    const expectedApiKey = this.config.get<string>('COMMON_X_API_KEY')?.trim();
+    if (!expectedApiKey) {
+      throw new InternalServerErrorException('API key protection is not configured');
+    }
+
+    const providedApiKey = (req.headers['x-api-key'] as string | undefined)?.trim();
+    if (!providedApiKey) {
+      throw new UnauthorizedException('Missing x-api-key header');
+    }
+
+    if (providedApiKey !== expectedApiKey) {
+      throw new UnauthorizedException('Invalid x-api-key header');
+    }
   }
 
   private async validateApiKey(rawKey: string, req: Request): Promise<void> {
