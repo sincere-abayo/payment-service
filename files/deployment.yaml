@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: momo-api
+  namespace: momo
+  labels:
+    app: momo-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: momo-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0        # zero-downtime deploys
+  template:
+    metadata:
+      labels:
+        app: momo-api
+    spec:
+      # ── Security context (non-root) ──────────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+
+      containers:
+        - name: api
+          image: momo-api:latest   # replace with your registry image
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+
+          # ── Resource limits ────────────────────────────────
+          resources:
+            requests:
+              cpu: '100m'
+              memory: '256Mi'
+            limits:
+              cpu: '500m'
+              memory: '512Mi'
+
+          # ── Env from ConfigMap + Secrets ───────────────────
+          envFrom:
+            - configMapRef:
+                name: momo-config
+            - secretRef:
+                name: momo-secrets
+
+          # ── Health checks ───────────────────────────────────
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # ── Security ────────────────────────────────────────
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+
+          # ── Writable tmp for logs ────────────────────────────
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+      # ── Graceful shutdown ────────────────────────────────────
+      terminationGracePeriodSeconds: 30

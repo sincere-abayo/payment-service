@@ -1,0 +1,213 @@
+// schema.prisma
+// MTN MoMo Disbursement Platform
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// ADMIN
+// Single super admin account
+// Email + password + TOTP-based 2FA
+// ─────────────────────────────────────────────
+model Admin {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String    // bcrypt hashed
+  twoFactorSecret  String?   // TOTP secret (e.g. from speakeasy / otplib)
+  twoFactorEnabled Boolean   @default(false)
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations
+  actions          AdminAction[]
+
+  @@map("admins")
+}
+
+// ─────────────────────────────────────────────
+// ADMIN ACTION LOG
+// Audit trail — every action admin takes is recorded
+// e.g. approved tenant, revoked API key, suspended tenant
+// ─────────────────────────────────────────────
+model AdminAction {
+  id         String   @id @default(uuid())
+  adminId    String
+  action     String   // e.g. "APPROVED_TENANT", "REVOKED_API_KEY"
+  targetType String   // e.g. "TenantApp", "ApiKey"
+  targetId   String   // the id of the affected record
+  note       String?  // optional admin note/reason
+  createdAt  DateTime @default(now())
+
+  // Relations
+  admin      Admin    @relation(fields: [adminId], references: [id])
+
+  @@index([adminId])
+  @@index([targetType, targetId])
+  @@map("admin_actions")
+}
+
+// ─────────────────────────────────────────────
+// TENANT APP
+// Represents each business/client using the platform
+// ─────────────────────────────────────────────
+model TenantApp {
+  id          String       @id @default(uuid())
+  name        String
+  email       String       @unique
+  webhookUrl  String?      // tenant's endpoint to receive callbacks
+  status      TenantStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  apiKeys     ApiKey[]
+  batches     DisbursementBatch[]
+  webhookLogs WebhookLog[]
+
+  @@map("tenant_apps")
+}
+
+enum TenantStatus {
+  PENDING    // registered, awaiting admin approval
+  ACTIVE     // approved, can make requests
+  SUSPENDED  // temporarily disabled by admin
+  REVOKED    // permanently disabled
+}
+
+// ─────────────────────────────────────────────
+// API KEY
+// Admin creates/manages keys per tenant
+// A tenant can have multiple keys (e.g. one revoked, one active)
+// ─────────────────────────────────────────────
+model ApiKey {
+  id        String       @id @default(uuid())
+  tenantId  String
+  key       String       @unique  // hashed in DB, shown once on creation
+  status    ApiKeyStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  revokedAt DateTime?
+
+  // Relations
+  tenant    TenantApp    @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("api_keys")
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+}
+
+// ─────────────────────────────────────────────
+// DISBURSEMENT BATCH
+// One batch = one request from a tenant app
+// Contains all recipients + the charge info
+// ─────────────────────────────────────────────
+model DisbursementBatch {
+  id             String      @id @default(uuid())
+  tenantId       String
+  userPseudoId   String      // end-user within the tenant app
+  totalAmount    Int         // total to disburse in smallest unit (e.g. RWF)
+  totalCharges   Int         // flat charge for the whole batch
+  chargeReceiver String      // phone number that receives the charge
+  status         BatchStatus @default(PENDING)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  // Relations
+  tenant         TenantApp         @relation(fields: [tenantId], references: [id])
+  jobs           DisbursementJob[]
+  webhookLogs    WebhookLog[]
+
+  @@index([tenantId])
+  @@index([userPseudoId])
+  @@index([status])
+  @@map("disbursement_batches")
+}
+
+enum BatchStatus {
+  PENDING           // received, not yet queued
+  PROCESSING        // jobs are in the queue / being worked
+  COMPLETED         // all jobs resolved successfully
+  PARTIALLY_FAILED  // some jobs failed, some succeeded
+}
+
+// ─────────────────────────────────────────────
+// DISBURSEMENT JOB
+// One job = one MTN transfer
+// A batch of 5 recipients = 6 jobs (5 payouts + 1 charge)
+// ─────────────────────────────────────────────
+model DisbursementJob {
+  id         String    @id @default(uuid())
+  batchId    String
+  phone      String    // recipient phone number
+  amount     Int       // amount for this specific transfer
+  jobType    JobType   // PAYOUT or CHARGE
+  status     JobStatus @default(QUEUED)
+  mtnRef     String?   // MTN MoMo transaction reference (from callback)
+  failReason String?   // error message if failed
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Relations
+  batch      DisbursementBatch @relation(fields: [batchId], references: [id])
+
+  @@index([batchId])
+  @@index([status])
+  @@map("disbursement_jobs")
+}
+
+enum JobType {
+  PAYOUT  // transfer to a recipient
+  CHARGE  // transfer to the charge receiver
+}
+
+enum JobStatus {
+  QUEUED      // sitting in the queue
+  PROCESSING  // worker picked it up, sent to MTN
+  SUCCESS     // MTN confirmed success via callback
+  FAILED      // MTN confirmed failure or timeout
+}
+
+// ─────────────────────────────────────────────
+// WEBHOOK LOG
+// Tracks every notification attempt to the tenant app
+// Supports retry logic with attempt counter
+// ─────────────────────────────────────────────
+model WebhookLog {
+  id            String        @id @default(uuid())
+  batchId       String
+  tenantId      String
+  url           String        // tenant's webhook endpoint at time of send
+  payload       Json          // full payload sent to tenant
+  status        WebhookStatus @default(PENDING)
+  attempts      Int           @default(0)
+  lastAttemptAt DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  batch         DisbursementBatch @relation(fields: [batchId], references: [id])
+  tenant        TenantApp         @relation(fields: [tenantId], references: [id])
+
+  @@index([batchId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("webhook_logs")
+}
+
+enum WebhookStatus {
+  PENDING   // not yet attempted
+  SUCCESS   // tenant responded with 200
+  FAILED    // all retries exhausted
+  RETRYING  // queued for retry
+}
