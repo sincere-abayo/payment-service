@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AdminCommands } from './admin/admin.commands';
 import { AuthCommands } from './auth/auth.commands';
+import { DisbursementCommands } from './disbursement/disbursement.commands';
 import { HttpExceptionFilter } from './common/filters/exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { CommandRegistry } from './master/command.registry';
@@ -60,6 +61,24 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
   ADM_REGKEY_6E7F: {
     tenantId: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
     reason: 'Routine key rotation',
+  },
+  DSB_INIT_3C4D: {
+    apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
+    userPseudoId: 'user_abc123',
+    totalAmount: 35000,
+    totalCharges: 500,
+    chargeReceiver: '0788000000',
+    recipients: [
+      { phone: '0781111111', amount: 2000 },
+      { phone: '0782222222', amount: 3000 },
+      { phone: '0783333333', amount: 10000 },
+      { phone: '0784444444', amount: 15000 },
+      { phone: '0785555555', amount: 5000 },
+    ],
+  },
+  DSB_STATUS_4E5F: {
+    apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
+    batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
   },
 };
 
@@ -144,6 +163,33 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
     tenantId: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
     rawApiKey: 'momo_08b6d820a79824f65b58e3b41436fadf9d7806f6583fdcfadfdcc2e09ce7dc59',
     createdAt: '2026-04-02T16:20:20.000Z',
+  },
+  DSB_INIT_3C4D: {
+    batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
+    status: 'PROCESSING',
+    jobCount: 6,
+    message: 'Batch accepted. 6 jobs queued (5 payouts + 1 charge).',
+  },
+  DSB_STATUS_4E5F: {
+    batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
+    status: 'PROCESSING',
+    totalAmount: 35000,
+    totalCharges: 500,
+    chargeReceiver: '0788000000',
+    userPseudoId: 'user_abc123',
+    jobs: [
+      {
+        jobId: 'job-1',
+        phone: '0781111111',
+        amount: 2000,
+        type: 'PAYOUT',
+        status: 'QUEUED',
+        mtnRef: null,
+        failReason: null,
+      },
+    ],
+    createdAt: '2026-04-03T00:00:00.000Z',
+    updatedAt: '2026-04-03T00:00:00.000Z',
   },
 };
 
@@ -272,8 +318,10 @@ async function bootstrap() {
     // before we generate the Swagger document.
     const authCommands = app.get(AuthCommands, { strict: false });
     const adminCommands = app.get(AdminCommands, { strict: false });
+    const disbursementCommands = app.get(DisbursementCommands, { strict: false });
     authCommands.onModuleInit();
     adminCommands.onModuleInit();
+    disbursementCommands.onModuleInit();
 
     const commandRegistry = app.get(CommandRegistry);
 

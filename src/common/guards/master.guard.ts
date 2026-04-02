@@ -67,22 +67,15 @@ export class MasterGuard implements CanActivate {
       (req as any).role = payload.role;
     }
 
-    if (command.requiresApiKey && (req as any).role === Role.ADMIN) {
-      const apiKey = req.headers['x-api-key'] as string | undefined;
-      if (!apiKey) {
-        throw new UnauthorizedException('Missing x-api-key header');
+    if (command.requiresApiKey) {
+      if (command.roles.includes(Role.TENANT)) {
+        const apiKey = req.body?.apiKey;
+        if (!apiKey) {
+          throw new UnauthorizedException('Missing apiKey in payload');
+        }
+
+        await this.validateApiKey(apiKey, req);
       }
-
-      await this.validateApiKey(apiKey, req);
-    }
-
-    if (command.requiresApiKey && (req as any).role === Role.TENANT) {
-      const apiKey = req.body?.apiKey;
-      if (!apiKey) {
-        throw new UnauthorizedException('Missing apiKey in payload');
-      }
-
-      await this.validateApiKey(apiKey, req);
     }
 
     const requestRole = (req as any).role as Role | undefined;
@@ -130,7 +123,7 @@ export class MasterGuard implements CanActivate {
     });
 
     if (!record || record.status !== 'ACTIVE') {
-      throw new UnauthorizedException('Invalid or revoked API key');
+      throw new UnauthorizedException('Invalid or revoked Tenant API key');
     }
 
     if (record.tenant.status !== 'ACTIVE') {

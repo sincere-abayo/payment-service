@@ -2,6 +2,8 @@
 
 > Complete technical reference for backend engineers working on the command-based NestJS payment service.
 
+> Implementation status (April 2026): Auth, Admin tenant-management, and disbursement batch intake/status lookup are implemented. Queue worker, MTN callback receiver, and outbound tenant webhooks are planned and documented as next phase.
+
 ---
 
 ## Table of Contents
@@ -43,14 +45,14 @@ This platform is a **multi-tenant payment middleware** that sits between client 
 
 ### Key design decisions
 
-| Decision | Choice | Reason |
-|---|---|---|
-| API style | Single endpoint, command-based | Uniform security, easier versioning, no route sprawl |
-| Framework | NestJS (TypeScript) | Modular, DI-first, enterprise-grade |
-| DB ORM | Prisma + PostgreSQL | Type-safe queries, migrations, schema-as-code |
-| Queue | BullMQ + Redis | Reliable async job processing with retries |
-| Auth | JWT + TOTP 2FA (admin), API Key (tenants) | Layered security per actor type |
-| Deployment | Docker + Kubernetes | Scalable, zero-downtime deploys |
+| Decision   | Choice                                    | Reason                                               |
+| ---------- | ----------------------------------------- | ---------------------------------------------------- |
+| API style  | Single endpoint, command-based            | Uniform security, easier versioning, no route sprawl |
+| Framework  | NestJS (TypeScript)                       | Modular, DI-first, enterprise-grade                  |
+| DB ORM     | Prisma + PostgreSQL                       | Type-safe queries, migrations, schema-as-code        |
+| Queue      | BullMQ + Redis                            | Reliable async job processing with retries           |
+| Auth       | JWT + TOTP 2FA (admin), API Key (tenants) | Layered security per actor type                      |
+| Deployment | Docker + Kubernetes                       | Scalable, zero-downtime deploys                      |
 
 ---
 
@@ -61,11 +63,11 @@ This platform is a **multi-tenant payment middleware** that sits between client 
 ```
 Tenant App
   │
-  │  POST /  { x-command, x-api-key or apiKey in body, Bearer JWT }
+  │  POST /  { x-command, x-api-key (common), Authorization?, apiKey? }
   ▼
 API Gateway (NestJS MasterController)
   │
-  ├── MasterGuard  →  JWT validate  →  API Key validate  →  Role check
+  ├── MasterGuard  →  common x-api-key validate  →  JWT/API key validate per command  →  Role check
   │
   ├── CommandRegistry.resolve(x-command)
   │
@@ -73,19 +75,19 @@ API Gateway (NestJS MasterController)
 Command Handler (inside feature module)
   │
   ├── [Auth]        ADM_LOGIN_*, ADM_VERIFY2FA_*
-  ├── [Admin]       ADM_APPROV_*, ADM_REVOKE_*, ADM_SUSPEND_*
-  ├── [Tenant]      TNT_GETBTCH_*, TNT_GETSTTS_*
-  └── [Disbursement] DSB_INIT_*, DSB_STATUS_*
+  ├── [Admin]       ADM_REGTNT_*, ADM_GETTNT_*, ADM_UPDTNT_*, ADM_APPROV_*, ADM_REVTNT_*, ADM_GENKEY_*, ADM_REVKEY_*, ADM_REGKEY_*
+  ├── [Tenant]      (planned next phase)
+  └── [Disbursement] (planned next phase)
         │
         ▼
-    DisbursementService
+    DisbursementService (planned)
         │
         ├── Store batch in DB (status: PENDING)
         ├── Create 6 DisbursementJob rows (5 payouts + 1 charge)
         └── Enqueue all 6 jobs → BullMQ
               │
               ▼
-          DisbursementProcessor (Worker)
+          DisbursementProcessor (Worker, planned)
               │
               ├── Pick job from queue
               ├── Call MtnService.transfer(phone, amount)
@@ -93,7 +95,7 @@ Command Handler (inside feature module)
               └── Update job status → trigger WebhookService
                         │
                         ▼
-                  WebhookService
+                  WebhookService (planned)
                         │
                         ├── Build payload { batch, jobs[] }
                         ├── POST to tenant webhookUrl
@@ -112,9 +114,9 @@ AppModule
   ├── MtnModule
   ├── AuthModule      → MasterModule, PrismaModule, JwtModule
   ├── AdminModule     → MasterModule, PrismaModule
-  ├── TenantModule    → MasterModule, PrismaModule
-  ├── DisbursementModule → MasterModule, PrismaModule, QueueModule, MtnModule
-  ├── WebhookModule   → PrismaModule
+  ├── TenantModule    → scaffold only (planned next phase)
+  ├── DisbursementModule → scaffold only (planned next phase)
+  ├── WebhookModule   → scaffold only (planned next phase)
   └── MasterModule    ← (loaded last)
 ```
 
@@ -208,20 +210,20 @@ AppModule
 
 ## 4. Tech Stack
 
-| Layer | Technology | Version |
-|---|---|---|
-| Runtime | Node.js | 20 LTS |
-| Framework | NestJS | ^10 |
-| Language | TypeScript | ^5 |
-| Database | PostgreSQL | 16 |
-| ORM | Prisma | ^5 |
-| Queue | BullMQ | ^5 |
-| Cache/Queue broker | Redis | 7 |
-| Auth | JWT (`@nestjs/jwt`) + bcrypt + otplib (TOTP) | latest |
-| HTTP security | helmet, compression, throttler | latest |
-| Docs | Swagger (`@nestjs/swagger`) | latest |
-| Container | Docker (multi-stage) | latest |
-| Orchestration | Kubernetes | 1.28+ |
+| Layer              | Technology                                   | Version |
+| ------------------ | -------------------------------------------- | ------- |
+| Runtime            | Node.js                                      | 20 LTS  |
+| Framework          | NestJS                                       | ^10     |
+| Language           | TypeScript                                   | ^5      |
+| Database           | PostgreSQL                                   | 16      |
+| ORM                | Prisma                                       | ^5      |
+| Queue              | BullMQ                                       | ^5      |
+| Cache/Queue broker | Redis                                        | 7       |
+| Auth               | JWT (`@nestjs/jwt`) + bcrypt + otplib (TOTP) | latest  |
+| HTTP security      | helmet, compression, throttler               | latest  |
+| Docs               | Swagger (`@nestjs/swagger`)                  | latest  |
+| Container          | Docker (multi-stage)                         | latest  |
+| Orchestration      | Kubernetes                                   | 1.28+   |
 
 ### Key packages
 
@@ -290,28 +292,29 @@ npm run start:dev
 
 ### Environment variables reference
 
-| Variable | Required | Description |
-|---|---|---|
-| `NODE_ENV` | yes | `development` \| `production` |
-| `PORT` | no | Default `3000` |
-| `DATABASE_URL` | yes | PostgreSQL connection string |
-| `REDIS_HOST` | yes | Redis hostname |
-| `REDIS_PORT` | yes | Default `6379` |
-| `REDIS_PASSWORD` | yes | Redis auth password |
-| `JWT_SECRET` | yes | Min 32 chars, random string |
-| `JWT_EXPIRES_IN` | no | Default `8h` |
-| `MTN_BASE_URL` | yes | MTN MoMo API base URL |
-| `MTN_SUBSCRIPTION_KEY` | yes | From MTN developer portal |
-| `MTN_API_USER` | yes | MTN API user UUID |
-| `MTN_API_KEY` | yes | MTN API key |
-| `MTN_ENVIRONMENT` | yes | `sandbox` \| `production` |
-| `MTN_CALLBACK_URL` | yes | Your public callback URL |
-| `ADMIN_EMAIL` | yes | Initial admin email (seed) |
-| `ADMIN_PASSWORD` | yes | Initial admin password (seed) |
-| `ALLOWED_ORIGINS` | no | Comma-separated CORS origins |
-| `THROTTLE_TTL` | no | Rate limit window ms, default `60000` |
-| `THROTTLE_LIMIT` | no | Max requests per window, default `60` |
-| `RUN_SEED` | no | `true` to seed on Docker start |
+| Variable               | Required | Description                                                        |
+| ---------------------- | -------- | ------------------------------------------------------------------ |
+| `NODE_ENV`             | yes      | `development` \| `production`                                      |
+| `PORT`                 | no       | Default `3000`                                                     |
+| `COMMON_X_API_KEY`     | yes      | Shared header key required for every command request (`x-api-key`) |
+| `DATABASE_URL`         | yes      | PostgreSQL connection string                                       |
+| `REDIS_HOST`           | yes      | Redis hostname                                                     |
+| `REDIS_PORT`           | yes      | Default `6379`                                                     |
+| `REDIS_PASSWORD`       | yes      | Redis auth password                                                |
+| `JWT_SECRET`           | yes      | Min 32 chars, random string                                        |
+| `JWT_EXPIRES_IN`       | no       | Default `8h`                                                       |
+| `MTN_BASE_URL`         | yes      | MTN MoMo API base URL                                              |
+| `MTN_SUBSCRIPTION_KEY` | yes      | From MTN developer portal                                          |
+| `MTN_API_USER`         | yes      | MTN API user UUID                                                  |
+| `MTN_API_KEY`          | yes      | MTN API key                                                        |
+| `MTN_ENVIRONMENT`      | yes      | `sandbox` \| `production`                                          |
+| `MTN_CALLBACK_URL`     | yes      | Your public callback URL                                           |
+| `ADMIN_EMAIL`          | yes      | Initial admin email (seed)                                         |
+| `ADMIN_PASSWORD`       | yes      | Initial admin password (seed)                                      |
+| `ALLOWED_ORIGINS`      | no       | Comma-separated CORS origins                                       |
+| `THROTTLE_TTL`         | no       | Rate limit window ms, default `60000`                              |
+| `THROTTLE_LIMIT`       | no       | Max requests per window, default `60`                              |
+| `RUN_SEED`             | no       | `true` to seed on Docker start                                     |
 
 ---
 
@@ -338,79 +341,86 @@ TenantApp ──────────── ApiKey
 ### Models
 
 #### `Admin`
-| Field | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `email` | String unique | |
-| `passwordHash` | String | bcrypt, cost factor 12 |
-| `twoFactorSecret` | String? | TOTP secret, nullable until setup |
-| `twoFactorEnabled` | Boolean | Default false |
-| `lastLoginAt` | DateTime? | |
+
+| Field              | Type          | Notes                             |
+| ------------------ | ------------- | --------------------------------- |
+| `id`               | UUID PK       |                                   |
+| `email`            | String unique |                                   |
+| `passwordHash`     | String        | bcrypt, cost factor 12            |
+| `twoFactorSecret`  | String?       | TOTP secret, nullable until setup |
+| `twoFactorEnabled` | Boolean       | Default false                     |
+| `lastLoginAt`      | DateTime?     |                                   |
 
 #### `AdminAction` (audit log)
-| Field | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `adminId` | UUID FK → Admin | |
-| `action` | String | e.g. `APPROVED_TENANT` |
-| `targetType` | String | e.g. `TenantApp`, `ApiKey` |
-| `targetId` | String | ID of affected record |
-| `note` | String? | Optional reason |
+
+| Field        | Type            | Notes                      |
+| ------------ | --------------- | -------------------------- |
+| `id`         | UUID PK         |                            |
+| `adminId`    | UUID FK → Admin |                            |
+| `action`     | String          | e.g. `APPROVED_TENANT`     |
+| `targetType` | String          | e.g. `TenantApp`, `ApiKey` |
+| `targetId`   | String          | ID of affected record      |
+| `note`       | String?         | Optional reason            |
 
 #### `TenantApp`
-| Field | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `name` | String | |
-| `email` | String unique | |
-| `webhookUrl` | String? | Where to POST results |
-| `status` | Enum | `PENDING \| ACTIVE \| SUSPENDED \| REVOKED` |
+
+| Field        | Type          | Notes                                       |
+| ------------ | ------------- | ------------------------------------------- |
+| `id`         | UUID PK       |                                             |
+| `name`       | String        |                                             |
+| `email`      | String unique |                                             |
+| `webhookUrl` | String?       | Where to POST results                       |
+| `status`     | Enum          | `PENDING \| ACTIVE \| SUSPENDED \| REVOKED` |
 
 #### `ApiKey`
-| Field | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `tenantId` | UUID FK → TenantApp | |
-| `key` | String unique | SHA-256 hash of raw key |
-| `status` | Enum | `ACTIVE \| REVOKED` |
-| `revokedAt` | DateTime? | |
+
+| Field       | Type                | Notes                   |
+| ----------- | ------------------- | ----------------------- |
+| `id`        | UUID PK             |                         |
+| `tenantId`  | UUID FK → TenantApp |                         |
+| `key`       | String unique       | SHA-256 hash of raw key |
+| `status`    | Enum                | `ACTIVE \| REVOKED`     |
+| `revokedAt` | DateTime?           |                         |
 
 > **Important:** The raw API key is shown only once on creation. Only the SHA-256 hash is stored.
 
 #### `DisbursementBatch`
-| Field | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `tenantId` | UUID FK → TenantApp | |
-| `userPseudoId` | String | End-user within the tenant app |
-| `totalAmount` | Int | Sum of all recipient amounts (smallest unit) |
-| `totalCharges` | Int | Flat fee for the whole batch |
-| `chargeReceiver` | String | Phone number receiving the charge |
-| `status` | Enum | `PENDING \| PROCESSING \| COMPLETED \| PARTIALLY_FAILED` |
+
+| Field            | Type                | Notes                                                    |
+| ---------------- | ------------------- | -------------------------------------------------------- |
+| `id`             | UUID PK             |                                                          |
+| `tenantId`       | UUID FK → TenantApp |                                                          |
+| `userPseudoId`   | String              | End-user within the tenant app                           |
+| `totalAmount`    | Int                 | Sum of all recipient amounts (smallest unit)             |
+| `totalCharges`   | Int                 | Flat fee for the whole batch                             |
+| `chargeReceiver` | String              | Phone number receiving the charge                        |
+| `status`         | Enum                | `PENDING \| PROCESSING \| COMPLETED \| PARTIALLY_FAILED` |
 
 #### `DisbursementJob`
-| Field | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `batchId` | UUID FK → DisbursementBatch | |
-| `phone` | String | Recipient phone number |
-| `amount` | Int | Amount for this transfer |
-| `jobType` | Enum | `PAYOUT \| CHARGE` |
-| `status` | Enum | `QUEUED \| PROCESSING \| SUCCESS \| FAILED` |
-| `mtnRef` | String? | MTN transaction reference from callback |
-| `failReason` | String? | Error message if failed |
+
+| Field        | Type                        | Notes                                       |
+| ------------ | --------------------------- | ------------------------------------------- |
+| `id`         | UUID PK                     |                                             |
+| `batchId`    | UUID FK → DisbursementBatch |                                             |
+| `phone`      | String                      | Recipient phone number                      |
+| `amount`     | Int                         | Amount for this transfer                    |
+| `jobType`    | Enum                        | `PAYOUT \| CHARGE`                          |
+| `status`     | Enum                        | `QUEUED \| PROCESSING \| SUCCESS \| FAILED` |
+| `mtnRef`     | String?                     | MTN transaction reference from callback     |
+| `failReason` | String?                     | Error message if failed                     |
 
 #### `WebhookLog`
-| Field | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `batchId` | UUID FK → DisbursementBatch | |
-| `tenantId` | UUID FK → TenantApp | |
-| `url` | String | Tenant webhook URL at time of send |
-| `payload` | Json | Full payload sent |
-| `status` | Enum | `PENDING \| SUCCESS \| FAILED \| RETRYING` |
-| `attempts` | Int | Retry counter |
-| `lastAttemptAt` | DateTime? | |
+
+| Field           | Type                        | Notes                                      |
+| --------------- | --------------------------- | ------------------------------------------ |
+| `id`            | UUID PK                     |                                            |
+| `batchId`       | UUID FK → DisbursementBatch |                                            |
+| `tenantId`      | UUID FK → TenantApp         |                                            |
+| `url`           | String                      | Tenant webhook URL at time of send         |
+| `payload`       | Json                        | Full payload sent                          |
+| `status`        | Enum                        | `PENDING \| SUCCESS \| FAILED \| RETRYING` |
+| `attempts`      | Int                         | Retry counter                              |
+| `lastAttemptAt` | DateTime?                   |                                            |
 
 ---
 
@@ -423,13 +433,12 @@ Every API request hits `POST /`. The `x-command` header determines what gets exe
 ```
 POST /
 Headers:
-  x-command: DSB_INIT_3C4D
-  Authorization: Bearer <jwt>          ← for admin commands
-  x-api-key: <key>                     ← for admin commands (header)
+  x-command: ADM_LOGIN_1A2B
+  x-api-key: <COMMON_X_API_KEY>        ← required for every command
+  Authorization: Bearer <jwt>          ← required for commands with requiresJwt=true
 Body:
   {
-    "apiKey": "raw_key",               ← for tenant payment commands (body)
-    "userPseudoId": "user_123",
+    "apiKey": "raw_tenant_key",        ← tenant-only commands in next phase
     ...
   }
 ```
@@ -438,18 +447,18 @@ Body:
 
 ```typescript
 interface CommandDefinition {
-  code: string;              // e.g. "DSB_INIT_3C4D"
-  description: string;       // shown in Swagger
-  roles: Role[];             // [Role.ADMIN] or [Role.TENANT]
-  requiresJwt: boolean;      // enforce Bearer token
-  requiresApiKey: boolean;   // enforce API key
+  code: string; // e.g. "DSB_INIT_3C4D"
+  description: string; // shown in Swagger
+  roles: Role[]; // [Role.ADMIN] or [Role.TENANT]
+  requiresJwt: boolean; // enforce Bearer token
+  requiresApiKey: boolean; // enforce API key
   handler: (payload: any, context: CommandContext) => Promise<any>;
 }
 
 interface CommandContext {
-  tenantId?: string;    // resolved from API key
-  adminId?: string;     // resolved from JWT
-  userId?: string;      // userPseudoId from payload/JWT
+  tenantId?: string; // resolved from API key
+  adminId?: string; // resolved from JWT
+  userId?: string; // userPseudoId from payload/JWT
   role: Role;
   ip: string;
 }
@@ -479,8 +488,8 @@ export class MyCommands implements OnModuleInit {
 
   onModuleInit() {
     this.registry.register({
-      code: 'MDL_ACTN_XXXX',
-      description: 'Does something useful',
+      code: "MDL_ACTN_XXXX",
+      description: "Does something useful",
       roles: [Role.ADMIN],
       requiresJwt: true,
       requiresApiKey: false,
@@ -530,9 +539,10 @@ Request
   ├── 3. Rate limiter (60 req/min per IP)
   ├── 4. MasterGuard
   │       ├── a. Resolve command from registry
-  │       ├── b. JWT validation (if requiresJwt)
-  │       ├── c. API key validation (header for admin, body for tenant)
-  │       └── d. Role check (command.roles includes request role?)
+  │       ├── b. Validate common x-api-key header (all commands)
+  │       ├── c. JWT validation (if requiresJwt)
+  │       ├── d. Tenant API key validation from body (tenant commands, next phase)
+  │       └── e. Role check (command.roles includes request role?)
   ├── 5. ValidationPipe (DTO whitelist + transform)
   └── 6. Command handler
 ```
@@ -542,35 +552,41 @@ Request
 ```
 Step 1 — ADM_LOGIN_1A2B
   POST /
+  Headers: { x-api-key: <COMMON_X_API_KEY>, x-command: ADM_LOGIN_1A2B }
   Body: { email, password }
   → Returns: { requires2FA: true, preAuthToken }   (if 2FA enabled)
   → Returns: { requires2FA: false, accessToken }   (if no 2FA)
 
 Step 2 — ADM_VERIFY2FA_2C3D  (only if 2FA enabled)
   POST /
+  Headers: { x-api-key: <COMMON_X_API_KEY>, x-command: ADM_VERIFY2FA_2C3D }
   Body: { preAuthToken, totpCode }
   → Returns: { accessToken }
 
 All subsequent admin calls:
   POST /
-  Headers: Authorization: Bearer <accessToken>
+  Headers: x-api-key: <COMMON_X_API_KEY>
+           Authorization: Bearer <accessToken>
            x-command: ADM_*
 ```
 
 ### Tenant authentication flow
 
 ```
-Tenant sends API key with EVERY payment request inside the body:
+Tenant flows are planned for next phase. They will require both keys:
 
   POST /
+  Headers: {
+    x-api-key: <COMMON_X_API_KEY>,
+    x-command: DSB_INIT_3C4D
+  }
   Body: {
-    apiKey: "raw_api_key",
+    apiKey: "raw_tenant_api_key",
     userPseudoId: "user_123",
     ...command-specific fields
   }
-  x-command: DSB_INIT_3C4D
 
-No JWT needed for tenants — the API key identifies them.
+No JWT needed for tenant flows — tenant apiKey identifies tenant while common x-api-key authorizes service access.
 ```
 
 ### API key lifecycle
@@ -587,10 +603,10 @@ No JWT needed for tenants — the API key identifies them.
 
 ### JWT token types
 
-| Token | Purpose | Expiry | Payload |
-|---|---|---|---|
-| Pre-auth token | Between login steps when 2FA enabled | 5 min | `{ sub, role, step: 'pre-auth' }` |
-| Access token | Full admin session | 8h (configurable) | `{ sub, role: 'ADMIN' }` |
+| Token          | Purpose                              | Expiry            | Payload                           |
+| -------------- | ------------------------------------ | ----------------- | --------------------------------- |
+| Pre-auth token | Between login steps when 2FA enabled | 5 min             | `{ sub, role, step: 'pre-auth' }` |
+| Access token   | Full admin session                   | 8h (configurable) | `{ sub, role: 'ADMIN' }`          |
 
 ### Security headers (via helmet)
 
@@ -606,14 +622,15 @@ No JWT needed for tenants — the API key identifies them.
 
 ### Auth commands
 
-| Code | Roles | JWT | API Key | Description |
-|---|---|---|---|---|
-| `ADM_LOGIN_1A2B` | ADMIN | ✗ | ✗ | Email + password login |
-| `ADM_VERIFY2FA_2C3D` | ADMIN | ✗ | ✗ | Verify TOTP to get access token |
-| `ADM_SETUP2FA_3E4F` | ADMIN | ✓ | ✗ | Generate 2FA secret + QR code |
-| `ADM_CONFIRM2FA_4G5H` | ADMIN | ✓ | ✗ | Confirm 2FA setup |
+| Code                  | Roles | JWT | API Key           | Description                     |
+| --------------------- | ----- | --- | ----------------- | ------------------------------- |
+| `ADM_LOGIN_1A2B`      | ADMIN | ✗   | ✓ (common header) | Email + password login          |
+| `ADM_VERIFY2FA_2C3D`  | ADMIN | ✗   | ✓ (common header) | Verify TOTP to get access token |
+| `ADM_SETUP2FA_3E4F`   | ADMIN | ✓   | ✓ (common header) | Generate 2FA secret + QR code   |
+| `ADM_CONFIRM2FA_4G5H` | ADMIN | ✓   | ✓ (common header) | Confirm 2FA setup               |
 
 #### `ADM_LOGIN_1A2B`
+
 ```json
 // Request body
 { "email": "admin@example.com", "password": "StrongPass123!" }
@@ -626,6 +643,7 @@ No JWT needed for tenants — the API key identifies them.
 ```
 
 #### `ADM_VERIFY2FA_2C3D`
+
 ```json
 // Request body
 { "preAuthToken": "eyJ...", "totpCode": "123456" }
@@ -638,19 +656,20 @@ No JWT needed for tenants — the API key identifies them.
 
 ### Admin commands
 
-| Code | Roles | JWT | API Key | Description |
-|---|---|---|---|---|
-| `ADM_REGTNT_5I6J` | ADMIN | ✓ | ✗ | Register new tenant app |
-| `ADM_APPROV_6K7L` | ADMIN | ✓ | ✗ | Approve pending tenant |
-| `ADM_SUSPTNT_7M8N` | ADMIN | ✓ | ✗ | Suspend active tenant |
-| `ADM_REVTNT_8O9P` | ADMIN | ✓ | ✗ | Permanently revoke tenant |
-| `ADM_GENKEY_9Q0R` | ADMIN | ✓ | ✗ | Generate API key for tenant |
-| `ADM_REVKEY_1S2T` | ADMIN | ✓ | ✗ | Revoke an API key |
-| `ADM_LSTTNT_3U4V` | ADMIN | ✓ | ✗ | List all tenants with status |
-| `ADM_LSTBTCH_5W6X` | ADMIN | ✓ | ✗ | List all batches (all tenants) |
-| `ADM_AUDITLOG_7Y8Z` | ADMIN | ✓ | ✗ | View admin action audit log |
+| Code               | Roles | JWT | API Key           | Description                      |
+| ------------------ | ----- | --- | ----------------- | -------------------------------- |
+| `ADM_REGTNT_5I6J`  | ADMIN | ✓   | ✓ (common header) | Register new tenant app          |
+| `ADM_GETTNT_2A3B`  | ADMIN | ✓   | ✓ (common header) | Get tenant with API key metadata |
+| `ADM_UPDTNT_4C5D`  | ADMIN | ✓   | ✓ (common header) | Update tenant profile data       |
+| `ADM_APPROV_6K7L`  | ADMIN | ✓   | ✓ (common header) | Approve pending tenant           |
+| `ADM_SUSPTNT_7M8N` | ADMIN | ✓   | ✓ (common header) | Suspend active tenant            |
+| `ADM_REVTNT_8O9P`  | ADMIN | ✓   | ✓ (common header) | Permanently revoke tenant        |
+| `ADM_GENKEY_9Q0R`  | ADMIN | ✓   | ✓ (common header) | Generate API key for tenant      |
+| `ADM_REVKEY_1S2T`  | ADMIN | ✓   | ✓ (common header) | Revoke an API key                |
+| `ADM_REGKEY_6E7F`  | ADMIN | ✓   | ✓ (common header) | Regenerate tenant API key        |
 
 #### `ADM_REGTNT_5I6J`
+
 ```json
 // Request body
 {
@@ -668,6 +687,7 @@ No JWT needed for tenants — the API key identifies them.
 ```
 
 #### `ADM_GENKEY_9Q0R`
+
 ```json
 // Request body
 { "tenantId": "uuid" }
@@ -682,14 +702,19 @@ No JWT needed for tenants — the API key identifies them.
 
 ---
 
-### Tenant commands
+### Disbursement commands
 
-| Code | Roles | JWT | API Key | Description |
-|---|---|---|---|---|
-| `TNT_LSTBTCH_1A1B` | TENANT | ✗ | ✓ (body) | List tenant's own batches |
-| `TNT_BTCHSTS_2C2D` | TENANT | ✗ | ✓ (body) | Get batch + job statuses |
+Disbursement batch intake and status lookup are live in the current runtime. Tenant batch-list/status commands remain planned for the next phase.
+
+#### Tenant commands (planned)
+
+| Code               | Roles  | JWT | API Key                           | Description               |
+| ------------------ | ------ | --- | --------------------------------- | ------------------------- |
+| `TNT_LSTBTCH_1A1B` | TENANT | ✗   | ✓ (common header + body `apiKey`) | List tenant's own batches |
+| `TNT_BTCHSTS_2C2D` | TENANT | ✗   | ✓ (common header + body `apiKey`) | Get batch + job statuses  |
 
 #### `TNT_BTCHSTS_2C2D`
+
 ```json
 // Request body
 { "apiKey": "momo_live_xxx", "batchId": "uuid" }
@@ -713,12 +738,12 @@ No JWT needed for tenants — the API key identifies them.
 
 ---
 
-### Disbursement commands
+#### Disbursement commands (planned)
 
-| Code | Roles | JWT | API Key | Description |
-|---|---|---|---|---|
-| `DSB_INIT_3C4D` | TENANT | ✗ | ✓ (body) | Initiate a disbursement batch |
-| `DSB_STATUS_4E5F` | TENANT | ✗ | ✓ (body) | Get batch status by ID |
+| Code              | Roles  | JWT | API Key                           | Description                   |
+| ----------------- | ------ | --- | --------------------------------- | ----------------------------- |
+| `DSB_INIT_3C4D`   | TENANT | ✗   | ✓ (common header + body `apiKey`) | Initiate a disbursement batch |
+| `DSB_STATUS_4E5F` | TENANT | ✗   | ✓ (common header + body `apiKey`) | Get batch status by ID        |
 
 #### `DSB_INIT_3C4D` — Main payment command
 
@@ -757,6 +782,8 @@ No JWT needed for tenants — the API key identifies them.
 ---
 
 ## 10. Disbursement Flow
+
+> Status: batch intake and status lookup are live. Queue workers, MTN callbacks, and webhook delivery remain next phase.
 
 ### Step-by-step
 
@@ -810,7 +837,7 @@ QUEUED → PROCESSING → SUCCESS
 const recipientTotal = payload.recipients.reduce((s, r) => s + r.amount, 0);
 if (recipientTotal !== payload.totalAmount) {
   throw new BadRequestException(
-    `totalAmount (${payload.totalAmount}) must equal sum of recipient amounts (${recipientTotal})`
+    `totalAmount (${payload.totalAmount}) must equal sum of recipient amounts (${recipientTotal})`,
   );
 }
 ```
@@ -819,24 +846,26 @@ if (recipientTotal !== payload.totalAmount) {
 
 ## 11. Queue & Worker System
 
+> Status: planned next phase. Not implemented in runtime yet.
+
 ### Queue setup
 
 ```typescript
 // queue.constants.ts
-export const DISBURSEMENT_QUEUE = 'disbursement';
-export const JOB_PROCESS_TRANSFER = 'process-transfer';
+export const DISBURSEMENT_QUEUE = "disbursement";
+export const JOB_PROCESS_TRANSFER = "process-transfer";
 ```
 
 ### Job payload
 
 ```typescript
 interface DisbursementJobPayload {
-  jobId: string;      // DisbursementJob.id
+  jobId: string; // DisbursementJob.id
   batchId: string;
   tenantId: string;
   phone: string;
   amount: number;
-  jobType: 'PAYOUT' | 'CHARGE';
+  jobType: "PAYOUT" | "CHARGE";
 }
 ```
 
@@ -859,8 +888,8 @@ export class DisbursementProcessor {
 const jobOptions = {
   attempts: 3,
   backoff: {
-    type: 'exponential',
-    delay: 2000,        // 2s, 4s, 8s
+    type: "exponential",
+    delay: 2000, // 2s, 4s, 8s
   },
   removeOnComplete: { count: 100 },
   removeOnFail: { count: 50 },
@@ -873,13 +902,15 @@ Use **Bull Board** for a web UI to inspect queues in development:
 
 ```typescript
 // Add to app.module.ts in development
-import { BullBoardModule } from '@bull-board/nestjs';
-import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
+import { BullBoardModule } from "@bull-board/nestjs";
+import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 ```
 
 ---
 
 ## 12. Webhook & Callback System
+
+> Status: planned next phase. Not implemented in runtime yet.
 
 ### MTN callback endpoint
 
@@ -950,6 +981,8 @@ The tenant app must respond with HTTP `200` to acknowledge receipt. Any other st
 
 ## 13. MTN MoMo Integration
 
+> Status: planned next phase. Not implemented in runtime yet.
+
 ### API flow
 
 ```
@@ -985,20 +1018,25 @@ The MTN access token expires in ~1 hour. Cache it in Redis:
 
 ```typescript
 // MtnService caches token in Redis with TTL = expires_in - 60s buffer
-const cachedToken = await this.redis.get('mtn:access_token');
+const cachedToken = await this.redis.get("mtn:access_token");
 if (cachedToken) return cachedToken;
 
 const token = await this.fetchNewToken();
-await this.redis.set('mtn:access_token', token.access_token, 'EX', token.expires_in - 60);
+await this.redis.set(
+  "mtn:access_token",
+  token.access_token,
+  "EX",
+  token.expires_in - 60,
+);
 return token.access_token;
 ```
 
 ### Environments
 
-| Environment | Base URL |
-|---|---|
-| Sandbox | `https://sandbox.momodeveloper.mtn.com` |
-| Production | `https://proxy.momoapi.mtn.com` |
+| Environment | Base URL                                |
+| ----------- | --------------------------------------- |
+| Sandbox     | `https://sandbox.momodeveloper.mtn.com` |
+| Production  | `https://proxy.momoapi.mtn.com`         |
 
 Set `MTN_ENVIRONMENT=sandbox` for development and testing.
 
@@ -1008,16 +1046,24 @@ Set `MTN_ENVIRONMENT=sandbox` for development and testing.
 
 ### What admin can do
 
-| Action | Command | Effect |
-|---|---|---|
-| Register tenant | `ADM_REGTNT_5I6J` | Creates TenantApp (PENDING) |
-| Approve tenant | `ADM_APPROV_6K7L` | Status → ACTIVE, logs action |
-| Suspend tenant | `ADM_SUSPTNT_7M8N` | Status → SUSPENDED, logs action |
-| Revoke tenant | `ADM_REVTNT_8O9P` | Status → REVOKED, all keys revoked |
-| Generate API key | `ADM_GENKEY_9Q0R` | Creates ApiKey, returns raw key once |
-| Revoke API key | `ADM_REVKEY_1S2T` | Status → REVOKED |
-| List tenants | `ADM_LSTTNT_3U4V` | Paginated list with status |
-| View batches | `ADM_LSTBTCH_5W6X` | All batches across all tenants |
+| Action             | Command            | Effect                                       |
+| ------------------ | ------------------ | -------------------------------------------- |
+| Register tenant    | `ADM_REGTNT_5I6J`  | Creates TenantApp (PENDING)                  |
+| Get tenant + keys  | `ADM_GETTNT_2A3B`  | Returns tenant details with API key metadata |
+| Update tenant      | `ADM_UPDTNT_4C5D`  | Updates name/email/webhook/status            |
+| Approve tenant     | `ADM_APPROV_6K7L`  | Status → ACTIVE, logs action                 |
+| Suspend tenant     | `ADM_SUSPTNT_7M8N` | Status → SUSPENDED, logs action              |
+| Revoke tenant      | `ADM_REVTNT_8O9P`  | Status → REVOKED, all keys revoked           |
+| Generate API key   | `ADM_GENKEY_9Q0R`  | Creates ApiKey, returns raw key once         |
+| Revoke API key     | `ADM_REVKEY_1S2T`  | Status → REVOKED                             |
+| Regenerate API key | `ADM_REGKEY_6E7F`  | Revokes active keys and creates a new key    |
+
+Planned admin commands:
+
+| Action         | Command             | Effect                            |
+| -------------- | ------------------- | --------------------------------- |
+| List tenants   | `ADM_LSTTNT_3U4V`   | Paginated list with status        |
+| View batches   | `ADM_LSTBTCH_5W6X`  | All batches across all tenants    |
 | View audit log | `ADM_AUDITLOG_7Y8Z` | All admin actions with timestamps |
 
 ### Audit log
@@ -1028,10 +1074,10 @@ Every admin action writes to `AdminAction`:
 await this.prisma.adminAction.create({
   data: {
     adminId: context.adminId,
-    action: 'APPROVED_TENANT',
-    targetType: 'TenantApp',
+    action: "APPROVED_TENANT",
+    targetType: "TenantApp",
     targetId: tenantId,
-    note: 'Verified business documents',
+    note: "Verified business documents",
   },
 });
 ```
@@ -1042,15 +1088,15 @@ await this.prisma.adminAction.create({
 
 ### HTTP status codes
 
-| Status | Meaning |
-|---|---|
-| 200 | Command executed successfully |
-| 400 | Bad request — invalid payload or business rule violation |
-| 401 | Unauthorized — missing/invalid JWT or API key |
-| 403 | Forbidden — valid credentials but insufficient role |
-| 404 | Unknown command code |
-| 429 | Rate limit exceeded |
-| 500 | Internal server error |
+| Status | Meaning                                                  |
+| ------ | -------------------------------------------------------- |
+| 200    | Command executed successfully                            |
+| 400    | Bad request — invalid payload or business rule violation |
+| 401    | Unauthorized — missing/invalid JWT or API key            |
+| 403    | Forbidden — valid credentials but insufficient role      |
+| 404    | Unknown command code                                     |
+| 429    | Rate limit exceeded                                      |
+| 500    | Internal server error                                    |
 
 ### Error response shape
 
@@ -1069,15 +1115,15 @@ await this.prisma.adminAction.create({
 
 ### Common errors
 
-| Error | Cause | Fix |
-|---|---|---|
-| `Unknown command: X` | Invalid `x-command` header | Check command code spelling |
-| `Missing Bearer token` | JWT required, not provided | Add `Authorization: Bearer <token>` header |
-| `Invalid or expired token` | JWT expired or wrong secret | Re-authenticate |
-| `Invalid or revoked API key` | Bad API key in body | Check `apiKey` field |
-| `Tenant account is not active` | Tenant suspended/pending | Contact admin |
-| `Insufficient permissions` | Wrong role for command | Check command roles |
-| `totalAmount must equal sum` | Payload math error | Sum recipients matches totalAmount |
+| Error                          | Cause                       | Fix                                        |
+| ------------------------------ | --------------------------- | ------------------------------------------ |
+| `Unknown command: X`           | Invalid `x-command` header  | Check command code spelling                |
+| `Missing Bearer token`         | JWT required, not provided  | Add `Authorization: Bearer <token>` header |
+| `Invalid or expired token`     | JWT expired or wrong secret | Re-authenticate                            |
+| `Invalid or revoked  API key`  | Bad API key in body         | Check `apiKey` field                       |
+| `Tenant account is not active` | Tenant suspended/pending    | Contact admin                              |
+| `Insufficient permissions`     | Wrong role for command      | Check command roles                        |
+| `totalAmount must equal sum`   | Payload math error          | Sum recipients matches totalAmount         |
 
 ---
 
@@ -1129,11 +1175,11 @@ docker-compose up -d --build api
 
 Services started by `docker-compose up`:
 
-| Service | Port | Notes |
-|---|---|---|
-| `api` | 3000 | NestJS app |
-| `postgres` | 5432 | PostgreSQL 16 |
-| `redis` | 6379 | Redis 7 with password |
+| Service    | Port | Notes                 |
+| ---------- | ---- | --------------------- |
+| `api`      | 3000 | NestJS app            |
+| `postgres` | 5432 | PostgreSQL 16         |
+| `redis`    | 6379 | Redis 7 with password |
 
 ---
 
@@ -1163,15 +1209,15 @@ kubectl logs -f deployment/momo-api -n momo
 
 ### Manifest summary
 
-| File | Purpose |
-|---|---|
-| `namespace.yaml` | Isolates all resources under `momo` namespace |
+| File              | Purpose                                               |
+| ----------------- | ----------------------------------------------------- |
+| `namespace.yaml`  | Isolates all resources under `momo` namespace         |
 | `deployment.yaml` | 2 replicas, rolling update, non-root, resource limits |
-| `service.yaml` | ClusterIP, routes port 80 → 3000 |
-| `ingress.yaml` | TLS via cert-manager, nginx rate limiting (30 rps) |
-| `configmap.yaml` | Non-secret env vars |
-| `secrets.yaml` | Sensitive env vars (base64 encoded) |
-| `hpa.yaml` | Auto-scale 2 → 10 pods on CPU 70% / memory 80% |
+| `service.yaml`    | ClusterIP, routes port 80 → 3000                      |
+| `ingress.yaml`    | TLS via cert-manager, nginx rate limiting (30 rps)    |
+| `configmap.yaml`  | Non-secret env vars                                   |
+| `secrets.yaml`    | Sensitive env vars (base64 encoded)                   |
+| `hpa.yaml`        | Auto-scale 2 → 10 pods on CPU 70% / memory 80%        |
 
 ### Secrets best practice
 
@@ -1187,6 +1233,7 @@ Never commit real values to `secrets.yaml`. Use one of:
 ## 18. Security Checklist
 
 ### Application level
+
 - [x] Helmet security headers on all responses
 - [x] CORS restricted to `POST` only and whitelisted origins
 - [x] Rate limiting: 60 requests/min per IP (configurable)
@@ -1199,6 +1246,7 @@ Never commit real values to `secrets.yaml`. Use one of:
 - [x] Admin action audit log for all sensitive operations
 
 ### Infrastructure level
+
 - [x] Docker: non-root user (uid 1001), read-only filesystem
 - [x] Docker: dropped all Linux capabilities
 - [x] K8s: `runAsNonRoot: true`, `allowPrivilegeEscalation: false`
@@ -1209,6 +1257,7 @@ Never commit real values to `secrets.yaml`. Use one of:
 - [x] Secrets: never committed — use sealed secrets or external manager
 
 ### Things to add before production
+
 - [ ] Request signing for MTN callbacks (validate `X-Callback-Signature` header)
 - [ ] IP allowlist for MTN callback endpoint
 - [ ] Refresh token rotation for admin sessions
@@ -1260,32 +1309,38 @@ npx ts-node prisma/seed.ts  # seed admin account
 ```
 MTN MoMo Disbursement Platform
   ├── Auth
-  │   ├── Login (ADM_LOGIN_1A2B)
-  │   ├── Verify 2FA (ADM_VERIFY2FA_2C3D)
-  │   ├── Setup 2FA (ADM_SETUP2FA_3E4F)
-  │   └── Confirm 2FA (ADM_CONFIRM2FA_4G5H)
+  │   ├── ADM_LOGIN_1A2B
+  │   ├── ADM_VERIFY2FA_2C3D
+  │   ├── ADM_SETUP2FA_3E4F
+  │   └── ADM_CONFIRM2FA_4G5H
   ├── Admin
-  │   ├── Register Tenant
-  │   ├── Approve Tenant
-  │   ├── Generate API Key
-  │   ├── Revoke API Key
-  │   └── View Audit Log
+  │   ├── ADM_REGTNT_5I6J
+  │   ├── ADM_GETTNT_2A3B
+  │   ├── ADM_UPDTNT_4C5D
+  │   ├── ADM_APPROV_6K7L
+  │   ├── ADM_SUSPTNT_7M8N
+  │   ├── ADM_REVTNT_8O9P
+  │   ├── ADM_GENKEY_9Q0R
+  │   ├── ADM_REVKEY_1S2T
+  │   └── ADM_REGKEY_6E7F
   ├── Disbursement
-  │   ├── Initiate Batch (DSB_INIT_3C4D)
-  │   └── Get Batch Status (DSB_STATUS_4E5F)
-  └── Tenant
-      ├── List Batches
-      └── Get Batch Status
+  │   ├── DSB_INIT_3C4D
+  │   └── DSB_STATUS_4E5F
+
+  Planned folder (next phase): Tenant
 ```
 
 ### Postman environment variables
 
 ```
-base_url        = http://localhost:3000
-admin_token     = (set after login)
-pre_auth_token  = (set after step 1 of 2FA login)
-tenant_api_key  = (set after admin generates key)
-batch_id        = (set after DSB_INIT)
+baseUrl         = http://localhost:3000
+serviceApiKey   = COMMON_X_API_KEY value
+adminAccessToken = (set after login/2FA)
+preAuthToken    = (set after step 1 of 2FA login)
+tenantApiKey    = (set after admin generates key)
+tenantId        = (set after tenant registration)
+apiKeyId        = (set after key generation)
+batchId         = (set after DSB_INIT)
 ```
 
 ### Postman auto-capture token (test script)
@@ -1295,10 +1350,10 @@ Add to `ADM_LOGIN_1A2B` Tests tab:
 ```javascript
 const res = pm.response.json();
 if (res.data.accessToken) {
-  pm.environment.set("admin_token", res.data.accessToken);
+  pm.environment.set("adminAccessToken", res.data.accessToken);
 }
 if (res.data.preAuthToken) {
-  pm.environment.set("pre_auth_token", res.data.preAuthToken);
+  pm.environment.set("preAuthToken", res.data.preAuthToken);
 }
 ```
 
@@ -1308,13 +1363,18 @@ if (res.data.preAuthToken) {
 1. ADM_LOGIN_1A2B         → get token
 2. ADM_VERIFY2FA_2C3D     → get full access token (if 2FA on)
 3. ADM_REGTNT_5I6J        → create tenant
-4. ADM_APPROV_6K7L        → approve tenant
-5. ADM_GENKEY_9Q0R        → get raw API key
-6. DSB_INIT_3C4D          → initiate batch (use API key in body)
-7. DSB_STATUS_4E5F        → poll status
-8. (webhook arrives)      → tenant receives callback
+4. ADM_GETTNT_2A3B        → verify tenant metadata
+5. ADM_UPDTNT_4C5D        → update tenant profile (optional)
+6. ADM_APPROV_6K7L        → approve tenant
+7. ADM_GENKEY_9Q0R        → generate raw tenant API key
+8. ADM_REGKEY_6E7F        → rotate tenant API key (optional)
+9. DSB_INIT_3C4D          → initiate batch (common x-api-key header + tenant apiKey in body)
+10. DSB_STATUS_4E5F       → poll status
+
+Planned next-phase flow:
+11. webhook callback      → tenant receives completion event
 ```
 
 ---
 
-*Last updated: 2025 — MTN MoMo Disbursement Platform v1.0*
+_Last updated: April 2026 — scope aligned with current implementation (Auth + Admin + disbursement intake/status live, Tenant planned)._

@@ -98,7 +98,7 @@ export class MasterGuard implements CanActivate {
     });
 
     if (!record || record.status !== 'ACTIVE') {
-      throw new UnauthorizedException('Invalid or revoked API key');
+      throw new UnauthorizedException('Invalid or revoked Tenant API key');
     }
     if (record.tenant.status !== 'ACTIVE') {
       throw new ForbiddenException('Tenant account is not active');

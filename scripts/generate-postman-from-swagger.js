@@ -13,6 +13,7 @@ function stringifyJson(value) {
 function commandGroupFor(code) {
   if (/^ADM_(LOGIN|VERIFY2FA|SETUP2FA|CONFIRM2FA)/.test(code)) return 'Auth';
   if (/^ADM_(REGTNT|GETTNT|UPDTNT|APPROV|SUSPTNT|REVTNT|GENKEY|REVKEY|REGKEY)/.test(code)) return 'Admin';
+  if (/^DSB_/.test(code)) return 'Disbursement';
   return 'Commands';
 }
 
@@ -68,6 +69,12 @@ function postmanTestsFor(commandCode) {
       '}',
       'if (json?.data?.rawApiKey) {',
       "  pm.collectionVariables.set('tenantApiKey', json.data.rawApiKey);",
+      '}',
+    ],
+    DSB_INIT_3C4D: [
+      ...shared,
+      'if (json?.data?.batchId) {',
+      "  pm.collectionVariables.set('batchId', json.data.batchId);",
       '}',
     ],
   };
@@ -180,6 +187,7 @@ function buildCollection(doc) {
       { key: 'tenantId', value: '' },
       { key: 'apiKeyId', value: '' },
       { key: 'tenantApiKey', value: '' },
+      { key: 'batchId', value: '' },
       { key: 'preAuthToken', value: '' },
     ],
     item: items,
@@ -207,6 +215,7 @@ async function main() {
       { key: 'tenantId', value: '', type: 'default', enabled: true },
       { key: 'apiKeyId', value: '', type: 'default', enabled: true },
       { key: 'tenantApiKey', value: '', type: 'default', enabled: true },
+      { key: 'batchId', value: '', type: 'default', enabled: true },
       { key: 'preAuthToken', value: '', type: 'default', enabled: true },
     ],
     _postman_variable_scope: 'environment',
