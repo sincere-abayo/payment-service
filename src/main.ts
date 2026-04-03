@@ -8,6 +8,7 @@ import { AppModule } from './app.module';
 import { AdminCommands } from './admin/admin.commands';
 import { AuthCommands } from './auth/auth.commands';
 import { DisbursementCommands } from './disbursement/disbursement.commands';
+import { TenantCommands } from './tenant/tenant.commands';
 import { HttpExceptionFilter } from './common/filters/exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { CommandRegistry } from './master/command.registry';
@@ -77,6 +78,15 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
     ],
   },
   DSB_STATUS_4E5F: {
+    apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
+    batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
+  },
+  TNT_LSTBTCH_1A1B: {
+    apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
+    limit: 20,
+    offset: 0,
+  },
+  TNT_BTCHSTS_2C2D: {
     apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
     batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
   },
@@ -172,7 +182,7 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
   },
   DSB_STATUS_4E5F: {
     batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
-    status: 'PROCESSING',
+    status: 'COMPLETED',
     totalAmount: 35000,
     totalCharges: 500,
     chargeReceiver: '0788000000',
@@ -183,13 +193,52 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
         phone: '0781111111',
         amount: 2000,
         type: 'PAYOUT',
-        status: 'QUEUED',
-        mtnRef: null,
+        status: 'SUCCESS',
+        mtnRef: 'mock_job-1',
         failReason: null,
       },
     ],
     createdAt: '2026-04-03T00:00:00.000Z',
     updatedAt: '2026-04-03T00:00:00.000Z',
+  },
+  TNT_LSTBTCH_1A1B: {
+    total: 1,
+    limit: 20,
+    offset: 0,
+    items: [
+      {
+        batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
+        status: 'COMPLETED',
+        totalAmount: 35000,
+        totalCharges: 500,
+        chargeReceiver: '0788000000',
+        jobCount: 6,
+        successCount: 6,
+        createdAt: '2026-04-03T00:00:00.000Z',
+        updatedAt: '2026-04-03T00:00:20.000Z',
+      },
+    ],
+  },
+  TNT_BTCHSTS_2C2D: {
+    batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
+    status: 'COMPLETED',
+    totalAmount: 35000,
+    totalCharges: 500,
+    chargeReceiver: '0788000000',
+    userPseudoId: 'user_abc123',
+    jobs: [
+      {
+        jobId: 'job-1',
+        phone: '0781111111',
+        amount: 2000,
+        type: 'PAYOUT',
+        status: 'SUCCESS',
+        mtnRef: 'mock_job-1',
+        failReason: null,
+      },
+    ],
+    createdAt: '2026-04-03T00:00:00.000Z',
+    updatedAt: '2026-04-03T00:00:20.000Z',
   },
 };
 
@@ -319,9 +368,11 @@ async function bootstrap() {
     const authCommands = app.get(AuthCommands, { strict: false });
     const adminCommands = app.get(AdminCommands, { strict: false });
     const disbursementCommands = app.get(DisbursementCommands, { strict: false });
+    const tenantCommands = app.get(TenantCommands, { strict: false });
     authCommands.onModuleInit();
     adminCommands.onModuleInit();
     disbursementCommands.onModuleInit();
+    tenantCommands.onModuleInit();
 
     const commandRegistry = app.get(CommandRegistry);
 

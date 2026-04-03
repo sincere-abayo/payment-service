@@ -2,7 +2,7 @@
 
 > Complete technical reference for backend engineers working on the command-based NestJS payment service.
 
-> Implementation status (April 2026): Auth, Admin tenant-management, disbursement batch intake/status, queue worker processing, MTN callback receiver, and outbound tenant webhooks are implemented. MTN transfer execution is currently stubbed and will be replaced with full provider integration next.
+> Implementation status (April 2026): Auth, Admin tenant-management, disbursement batch intake/status, queue worker processing, MTN callback receiver, outbound tenant webhooks, and tenant query commands are implemented. MTN transfer execution is currently stubbed in optimistic-success mode and will be replaced with full provider integration next.
 
 ---
 
@@ -76,7 +76,7 @@ Command Handler (inside feature module)
   │
   ├── [Auth]        ADM_LOGIN_*, ADM_VERIFY2FA_*
   ├── [Admin]       ADM_REGTNT_*, ADM_GETTNT_*, ADM_UPDTNT_*, ADM_APPROV_*, ADM_REVTNT_*, ADM_GENKEY_*, ADM_REVKEY_*, ADM_REGKEY_*
-  ├── [Tenant]      (planned next phase)
+  ├── [Tenant]      TNT_LSTBTCH_*, TNT_BTCHSTS_*
   └── [Disbursement] DSB_INIT_*, DSB_STATUS_*
         │
         ▼
@@ -114,7 +114,7 @@ AppModule
   ├── MtnModule
   ├── AuthModule      → MasterModule, PrismaModule, JwtModule
   ├── AdminModule     → MasterModule, PrismaModule
-  ├── TenantModule    → scaffold only (planned next phase)
+  ├── TenantModule    → MasterModule, PrismaModule
   ├── DisbursementModule → MasterModule, PrismaModule, QueueModule, MtnModule, WebhookModule
   ├── WebhookModule   → PrismaModule
   └── MasterModule    ← (loaded last)
@@ -702,11 +702,7 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
 
 ---
 
-### Disbursement commands
-
-Disbursement batch intake and status lookup are live in the current runtime. Tenant batch-list/status commands remain planned for the next phase.
-
-#### Tenant commands (planned)
+### Tenant commands
 
 | Code               | Roles  | JWT | API Key                           | Description               |
 | ------------------ | ------ | --- | --------------------------------- | ------------------------- |
@@ -738,7 +734,7 @@ Disbursement batch intake and status lookup are live in the current runtime. Ten
 
 ---
 
-#### Disbursement commands (planned)
+### Disbursement commands
 
 | Code              | Roles  | JWT | API Key                           | Description                   |
 | ----------------- | ------ | --- | --------------------------------- | ----------------------------- |
@@ -784,6 +780,8 @@ Disbursement batch intake and status lookup are live in the current runtime. Ten
 ## 10. Disbursement Flow
 
 > Status: live. Batch intake, queue processing, callback updates, and webhook delivery are implemented.
+
+> Note: Until full MTN API integration is completed, disbursement worker/callback paths use optimistic success by default for all jobs.
 
 ### Step-by-step
 
@@ -1326,8 +1324,9 @@ MTN MoMo Disbursement Platform
   ├── Disbursement
   │   ├── DSB_INIT_3C4D
   │   └── DSB_STATUS_4E5F
-
-  Planned folder (next phase): Tenant
+  └── Tenant
+      ├── TNT_LSTBTCH_1A1B
+      └── TNT_BTCHSTS_2C2D
 ```
 
 ### Postman environment variables
@@ -1370,11 +1369,13 @@ if (res.data.preAuthToken) {
 8. ADM_REGKEY_6E7F        → rotate tenant API key (optional)
 9. DSB_INIT_3C4D          → initiate batch (common x-api-key header + tenant apiKey in body)
 10. DSB_STATUS_4E5F       → poll status
+11. TNT_LSTBTCH_1A1B      → list tenant batches
+12. TNT_BTCHSTS_2C2D      → fetch tenant batch/job status
 
-Planned next-phase flow:
-11. webhook callback      → tenant receives completion event (auto-dispatched when batch reaches terminal states)
+Next-phase flow:
+13. replace optimistic success with full MTN transfer integration
 ```
 
 ---
 
-_Last updated: April 2026 — scope aligned with current implementation (Auth + Admin + disbursement processing/callback/webhook live; tenant commands and full MTN API integration planned)._
+_Last updated: April 2026 — scope aligned with current implementation (Auth + Admin + Disbursement + Tenant query commands live; full MTN API integration planned)._

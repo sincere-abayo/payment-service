@@ -35,7 +35,7 @@ export class WebhookService {
       data: {
         status: normalized,
         mtnRef: payload.financialTransactionId ?? job.mtnRef,
-        failReason: normalized === JobStatus.FAILED ? payload.reason ?? 'MTN transfer failed' : null,
+        failReason: null,
       },
     });
 
@@ -163,10 +163,10 @@ export class WebhookService {
 
   private normalizeCallbackStatus(status?: string): JobStatus {
     const normalized = status?.trim().toUpperCase();
-    if (normalized === 'SUCCESS' || normalized === 'SUCCESSFUL') {
-      return JobStatus.SUCCESS;
+    if (normalized && normalized !== 'SUCCESS' && normalized !== 'SUCCESSFUL') {
+      this.logger.warn(`Ignoring non-success callback status '${normalized}' and using SUCCESS in mock mode`);
     }
 
-    return JobStatus.FAILED;
+    return JobStatus.SUCCESS;
   }
 }

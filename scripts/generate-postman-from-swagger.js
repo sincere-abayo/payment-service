@@ -14,6 +14,7 @@ function commandGroupFor(code) {
   if (/^ADM_(LOGIN|VERIFY2FA|SETUP2FA|CONFIRM2FA)/.test(code)) return 'Auth';
   if (/^ADM_(REGTNT|GETTNT|UPDTNT|APPROV|SUSPTNT|REVTNT|GENKEY|REVKEY|REGKEY)/.test(code)) return 'Admin';
   if (/^DSB_/.test(code)) return 'Disbursement';
+  if (/^TNT_/.test(code)) return 'Tenant';
   return 'Commands';
 }
 
