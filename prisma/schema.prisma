@@ -79,6 +79,7 @@ enum ApiKeyStatus {
 model DisbursementBatch {
   id             String            @id @default(uuid())
   tenantId       String
+  idempotencyKey String?
   userPseudoId   String
   totalAmount    Int
   totalCharges   Int
@@ -90,7 +91,9 @@ model DisbursementBatch {
   jobs           DisbursementJob[]
   webhookLogs    WebhookLog[]
 
+  @@unique([tenantId, idempotencyKey])
   @@index([tenantId])
+  @@index([idempotencyKey])
   @@index([userPseudoId])
   @@index([status])
   @@map("disbursement_batches")

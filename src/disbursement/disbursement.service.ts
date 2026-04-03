@@ -19,6 +19,7 @@ type RecipientInput = {
 
 type InitiateDisbursementPayload = {
   apiKey?: string;
+  idempotencyKey?: string;
   userPseudoId?: string;
   totalAmount?: number;
   totalCharges?: number;
@@ -38,6 +39,7 @@ export class DisbursementService {
       throw new BadRequestException('Tenant context could not be resolved');
     }
 
+    const idempotencyKey = this.requireString(payload.idempotencyKey, 'idempotencyKey');
     const userPseudoId = this.requireString(payload.userPseudoId, 'userPseudoId');
     const chargeReceiver = this.requireString(payload.chargeReceiver, 'chargeReceiver');
     const totalAmount = this.requirePositiveInteger(payload.totalAmount, 'totalAmount');
@@ -51,10 +53,34 @@ export class DisbursementService {
       );
     }
 
+    const existing = await this.prisma.disbursementBatch.findUnique({
+      where: {
+        tenantId_idempotencyKey: {
+          tenantId,
+          idempotencyKey,
+        },
+      },
+      include: {
+        jobs: {
+          select: { id: true },
+        },
+      },
+    });
+
+    if (existing) {
+      return {
+        batchId: existing.id,
+        status: existing.status,
+        jobCount: existing.jobs.length,
+        message: `Idempotent replay: returning existing batch ${existing.id}.`,
+      };
+    }
+
     const batch = await this.prisma.$transaction(async (tx) => {
       const createdBatch = await tx.disbursementBatch.create({
         data: {
           tenantId,
+          idempotencyKey,
           userPseudoId,
           totalAmount,
           totalCharges,

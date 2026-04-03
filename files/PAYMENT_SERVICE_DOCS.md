@@ -747,6 +747,7 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
 // Request body
 {
   "apiKey": "momo_live_xxxxxxxxxxxxxxxxxxxx",
+  "idempotencyKey": "idem_20260403_0001",
   "userPseudoId": "user_abc123",
   "totalAmount": 35000,
   "totalCharges": 500,
@@ -761,6 +762,7 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
 }
 
 // Validation rules:
+// - idempotencyKey is required and unique per tenant
 // - sum(recipients[].amount) must equal totalAmount
 // - totalCharges > 0
 // - chargeReceiver must be valid phone format
@@ -791,6 +793,7 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
    └── DisbursementService.initiateBatch(payload, context)
 
 2. DisbursementService.initiateBatch()
+  └── Validate idempotencyKey and return existing batch on duplicate key
    └── Validate: sum(amounts) === totalAmount
    └── Create DisbursementBatch (status: PENDING)
    └── Create 5 DisbursementJob rows (type: PAYOUT)
@@ -802,12 +805,12 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
 3. DisbursementProcessor (worker) picks job from queue
    └── Update job status → PROCESSING
    └── Call MtnService.transfer({ phone, amount, externalId: job.id })
-   └── MTN returns { referenceId }  ← async, result comes via callback
+  └── MTN service stub returns { referenceId } and marks SUCCESS by default
 
 4. MTN MoMo sends callback to MTN_CALLBACK_URL
    └── WebhookReceiver validates callback signature
    └── Finds job by externalId (= job.id)
-   └── Updates job: status = SUCCESS | FAILED, mtnRef = referenceId
+  └── Updates job in optimistic-success mode and stores callback reference
    └── Checks: are all 6 jobs in terminal state?
        ├── Yes → update batch status (COMPLETED or PARTIALLY_FAILED)
        │         → trigger WebhookService.sendToBatch(batchId)
@@ -964,13 +967,12 @@ After all 6 jobs resolve, the system POSTs to the tenant's `webhookUrl`:
 
 ```
 Attempt 1 → immediately
-Attempt 2 → 30s delay
-Attempt 3 → 2min delay
-Attempt 4 → 10min delay
-Attempt 5 → 1h delay
+Attempt 2 → queued retry with exponential backoff (base 30s)
+Attempt 3 → queued retry with exponential backoff
+Attempt 4 → queued retry with exponential backoff
+Attempt 5 → queued retry with exponential backoff
 
 After 5 failed attempts → WebhookLog.status = FAILED
-Admin can manually re-trigger via ADM_RETRYWBH_* command
 ```
 
 The tenant app must respond with HTTP `200` to acknowledge receipt. Any other status code triggers a retry.
@@ -1259,7 +1261,7 @@ Never commit real values to `secrets.yaml`. Use one of:
 - [ ] Request signing for MTN callbacks (validate `X-Callback-Signature` header)
 - [ ] IP allowlist for MTN callback endpoint
 - [ ] Refresh token rotation for admin sessions
-- [ ] Idempotency key on `DSB_INIT_3C4D` to prevent duplicate batches
+- [x] Idempotency key on `DSB_INIT_3C4D` to prevent duplicate batches
 - [ ] PII field encryption for phone numbers at rest (Prisma middleware)
 - [ ] Centralized logging (Datadog / ELK / Loki)
 - [ ] Alerting on FAILED batches and webhook retries exhausted

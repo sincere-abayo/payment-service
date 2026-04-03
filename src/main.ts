@@ -65,6 +65,7 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
   },
   DSB_INIT_3C4D: {
     apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
+    idempotencyKey: 'idem_20260403_0001',
     userPseudoId: 'user_abc123',
     totalAmount: 35000,
     totalCharges: 500,

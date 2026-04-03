@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
 import { BatchStatus, JobStatus, WebhookStatus } from '@prisma/client';
+import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  JOB_SEND_WEBHOOK,
+  WEBHOOK_QUEUE,
+} from '../queue/queue.module';
 
 type CallbackPayload = {
   externalId?: string;
@@ -13,7 +19,10 @@ type CallbackPayload = {
 export class WebhookService {
   private readonly logger = new Logger(WebhookService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue(WEBHOOK_QUEUE) private readonly webhookQueue: Queue,
+  ) {}
 
   async handleMtnCallback(payload: CallbackPayload) {
     if (!payload.externalId) {
@@ -78,7 +87,12 @@ export class WebhookService {
     }
 
     const existingLog = await this.prisma.webhookLog.findFirst({
-      where: { batchId: batch.id },
+      where: {
+        batchId: batch.id,
+        status: {
+          in: [WebhookStatus.PENDING, WebhookStatus.RETRYING, WebhookStatus.SUCCESS],
+        },
+      },
     });
     if (existingLog) {
       return { dispatched: false, reason: 'webhook already attempted' };
@@ -118,15 +132,45 @@ export class WebhookService {
       },
     });
 
+    await this.webhookQueue.add(
+      JOB_SEND_WEBHOOK,
+      { webhookLogId: log.id },
+      {
+        attempts: 5,
+        backoff: {
+          type: 'exponential',
+          delay: 30000,
+        },
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 50 },
+      },
+    );
+
+    return { dispatched: true };
+  }
+
+  async processWebhookDelivery(
+    webhookLogId: string,
+    currentAttempt: number,
+    maxAttempts: number,
+  ): Promise<boolean> {
+    const log = await this.prisma.webhookLog.findUnique({
+      where: { id: webhookLogId },
+    });
+
+    if (!log) {
+      return false;
+    }
+
     const now = new Date();
 
     try {
-      const response = await fetch(batch.tenant.webhookUrl, {
+      const response = await fetch(log.url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(log.payload),
       });
 
       if (!response.ok) {
@@ -137,27 +181,31 @@ export class WebhookService {
         where: { id: log.id },
         data: {
           status: WebhookStatus.SUCCESS,
-          attempts: 1,
+          attempts: currentAttempt,
           lastAttemptAt: now,
         },
       });
 
-      this.logger.log(`Delivered webhook for batch ${batch.id} to ${batch.tenant.webhookUrl}`);
-      return { dispatched: true };
+      this.logger.log(`Delivered webhook ${log.id} to ${log.url}`);
+      return false;
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unknown webhook delivery error';
+      const exhausted = currentAttempt >= maxAttempts;
 
       await this.prisma.webhookLog.update({
         where: { id: log.id },
         data: {
-          status: WebhookStatus.FAILED,
-          attempts: 1,
+          status: exhausted ? WebhookStatus.FAILED : WebhookStatus.RETRYING,
+          attempts: currentAttempt,
           lastAttemptAt: now,
         },
       });
 
-      this.logger.warn(`Failed webhook for batch ${batch.id}: ${reason}`);
-      return { dispatched: false, reason };
+      this.logger.warn(
+        `Failed webhook ${log.id} attempt ${currentAttempt}/${maxAttempts}: ${reason}`,
+      );
+
+      return !exhausted;
     }
   }
 
