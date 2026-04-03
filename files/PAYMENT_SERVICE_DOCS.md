@@ -656,20 +656,20 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
 
 ### Admin commands
 
-| Code               | Roles | JWT | API Key           | Description                      |
-| ------------------ | ----- | --- | ----------------- | -------------------------------- |
-| `ADM_REGTNT_5I6J`  | ADMIN | ✓   | ✓ (common header) | Register new tenant app          |
-| `ADM_LSTTNT_3U4V`  | ADMIN | ✓   | ✓ (common header) | List all tenants with details    |
+| Code               | Roles | JWT | API Key           | Description                       |
+| ------------------ | ----- | --- | ----------------- | --------------------------------- |
+| `ADM_REGTNT_5I6J`  | ADMIN | ✓   | ✓ (common header) | Register new tenant app           |
+| `ADM_LSTTNT_3U4V`  | ADMIN | ✓   | ✓ (common header) | List all tenants with details     |
 | `ADM_DASHST_8D9E`  | ADMIN | ✓   | ✓ (common header) | Dashboard statistics (date-aware) |
-| `ADM_REPORT_0F1G`  | ADMIN | ✓   | ✓ (common header) | Reports with date filters        |
-| `ADM_GETTNT_2A3B`  | ADMIN | ✓   | ✓ (common header) | Get tenant with API key metadata |
-| `ADM_UPDTNT_4C5D`  | ADMIN | ✓   | ✓ (common header) | Update tenant profile data       |
-| `ADM_APPROV_6K7L`  | ADMIN | ✓   | ✓ (common header) | Approve pending tenant           |
-| `ADM_SUSPTNT_7M8N` | ADMIN | ✓   | ✓ (common header) | Suspend active tenant            |
-| `ADM_REVTNT_8O9P`  | ADMIN | ✓   | ✓ (common header) | Permanently revoke tenant        |
-| `ADM_GENKEY_9Q0R`  | ADMIN | ✓   | ✓ (common header) | Generate API key for tenant      |
-| `ADM_REVKEY_1S2T`  | ADMIN | ✓   | ✓ (common header) | Revoke an API key                |
-| `ADM_REGKEY_6E7F`  | ADMIN | ✓   | ✓ (common header) | Regenerate tenant API key        |
+| `ADM_REPORT_0F1G`  | ADMIN | ✓   | ✓ (common header) | Reports with date filters         |
+| `ADM_GETTNT_2A3B`  | ADMIN | ✓   | ✓ (common header) | Get tenant with API key metadata  |
+| `ADM_UPDTNT_4C5D`  | ADMIN | ✓   | ✓ (common header) | Update tenant profile data        |
+| `ADM_APPROV_6K7L`  | ADMIN | ✓   | ✓ (common header) | Approve pending tenant            |
+| `ADM_SUSPTNT_7M8N` | ADMIN | ✓   | ✓ (common header) | Suspend active tenant             |
+| `ADM_REVTNT_8O9P`  | ADMIN | ✓   | ✓ (common header) | Permanently revoke tenant         |
+| `ADM_GENKEY_9Q0R`  | ADMIN | ✓   | ✓ (common header) | Generate API key for tenant       |
+| `ADM_REVKEY_1S2T`  | ADMIN | ✓   | ✓ (common header) | Revoke an API key                 |
+| `ADM_REGKEY_6E7F`  | ADMIN | ✓   | ✓ (common header) | Regenerate tenant API key         |
 
 #### `ADM_REGTNT_5I6J`
 
