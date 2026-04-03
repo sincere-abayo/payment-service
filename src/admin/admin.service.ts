@@ -65,6 +65,95 @@ export class AdminService {
     return tenant;
   }
 
+  async listTenants(
+    adminId: string,
+    payload: { limit?: number; offset?: number; status?: string; q?: string },
+  ) {
+    const limit =
+      typeof payload.limit === 'number' && Number.isInteger(payload.limit) && payload.limit > 0
+        ? Math.min(payload.limit, 200)
+        : 100;
+
+    const offset =
+      typeof payload.offset === 'number' && Number.isInteger(payload.offset) && payload.offset >= 0
+        ? payload.offset
+        : 0;
+
+    const where: {
+      status?: TenantStatus;
+      OR?: Array<{ name?: { contains: string; mode: 'insensitive' }; email?: { contains: string; mode: 'insensitive' } }>;
+    } = {};
+
+    if (payload.status !== undefined) {
+      where.status = this.normalizeTenantStatus(payload.status);
+    }
+
+    const query = payload.q?.trim();
+    if (query) {
+      where.OR = [
+        { name: { contains: query, mode: 'insensitive' } },
+        { email: { contains: query, mode: 'insensitive' } },
+      ];
+    }
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.tenantApp.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: limit,
+        include: {
+          apiKeys: {
+            orderBy: { createdAt: 'desc' },
+            select: {
+              id: true,
+              status: true,
+              createdAt: true,
+              revokedAt: true,
+            },
+          },
+          batches: {
+            select: {
+              id: true,
+              status: true,
+              createdAt: true,
+            },
+          },
+        },
+      }),
+      this.prisma.tenantApp.count({ where }),
+    ]);
+
+    await this.logAction(adminId, {
+      action: 'LISTED_TENANTS',
+      targetType: 'TenantApp',
+      targetId: 'all',
+      note: `limit=${limit}, offset=${offset}${where.status ? `, status=${where.status}` : ''}${query ? `, q=${query}` : ''}`,
+    });
+
+    return {
+      total,
+      limit,
+      offset,
+      items: items.map((tenant) => ({
+        id: tenant.id,
+        name: tenant.name,
+        email: tenant.email,
+        webhookUrl: tenant.webhookUrl,
+        status: tenant.status,
+        createdAt: tenant.createdAt,
+        updatedAt: tenant.updatedAt,
+        apiKeys: tenant.apiKeys,
+        batchSummary: {
+          total: tenant.batches.length,
+          completed: tenant.batches.filter((batch) => batch.status === 'COMPLETED').length,
+          partiallyFailed: tenant.batches.filter((batch) => batch.status === 'PARTIALLY_FAILED').length,
+          processing: tenant.batches.filter((batch) => batch.status === 'PROCESSING').length,
+        },
+      })),
+    };
+  }
+
   async updateTenant(
     adminId: string,
     tenantId: string,

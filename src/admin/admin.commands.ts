@@ -30,6 +30,17 @@ export class AdminCommands implements OnModuleInit {
     });
 
     this.registry.register({
+      code: 'ADM_LSTTNT_3U4V',
+      description: 'List all tenants with details.',
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (payload, context) => {
+        return this.adminService.listTenants(context.adminId!, payload);
+      },
+    });
+
+    this.registry.register({
       code: 'ADM_GETTNT_2A3B',
       description: 'Get tenant details with API key metadata.',
       roles: [Role.ADMIN],

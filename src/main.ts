@@ -32,6 +32,12 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
     webhookUrl: 'https://acme.example/momo/callback',
     status: 'APPROVE',
   },
+  ADM_LSTTNT_3U4V: {
+    limit: 50,
+    offset: 0,
+    status: 'ACTIVE',
+    q: 'acme',
+  },
   ADM_GETTNT_2A3B: {
     tenantId: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
   },
@@ -116,6 +122,36 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
     status: 'ACTIVE',
     createdAt: '2026-04-02T16:14:29.000Z',
     updatedAt: '2026-04-02T16:14:29.000Z',
+  },
+  ADM_LSTTNT_3U4V: {
+    total: 1,
+    limit: 50,
+    offset: 0,
+    items: [
+      {
+        id: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
+        name: 'Acme Finance',
+        email: 'ops@acme.example',
+        webhookUrl: 'https://acme.example/momo/callback',
+        status: 'ACTIVE',
+        createdAt: '2026-04-02T16:14:29.000Z',
+        updatedAt: '2026-04-03T03:10:00.000Z',
+        apiKeys: [
+          {
+            id: '2f88951a-cfad-46d8-bbb9-6753cf925554',
+            status: 'ACTIVE',
+            createdAt: '2026-04-02T16:18:20.000Z',
+            revokedAt: null,
+          },
+        ],
+        batchSummary: {
+          total: 3,
+          completed: 3,
+          partiallyFailed: 0,
+          processing: 0,
+        },
+      },
+    ],
   },
   ADM_GETTNT_2A3B: {
     id: 'f61adb55-62ce-4221-8630-883c3a8bda4e',

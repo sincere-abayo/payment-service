@@ -659,6 +659,7 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
 | Code               | Roles | JWT | API Key           | Description                      |
 | ------------------ | ----- | --- | ----------------- | -------------------------------- |
 | `ADM_REGTNT_5I6J`  | ADMIN | ✓   | ✓ (common header) | Register new tenant app          |
+| `ADM_LSTTNT_3U4V`  | ADMIN | ✓   | ✓ (common header) | List all tenants with details    |
 | `ADM_GETTNT_2A3B`  | ADMIN | ✓   | ✓ (common header) | Get tenant with API key metadata |
 | `ADM_UPDTNT_4C5D`  | ADMIN | ✓   | ✓ (common header) | Update tenant profile data       |
 | `ADM_APPROV_6K7L`  | ADMIN | ✓   | ✓ (common header) | Approve pending tenant           |
@@ -1049,6 +1050,7 @@ Set `MTN_ENVIRONMENT=sandbox` for development and testing.
 | Action             | Command            | Effect                                       |
 | ------------------ | ------------------ | -------------------------------------------- |
 | Register tenant    | `ADM_REGTNT_5I6J`  | Creates TenantApp (PENDING)                  |
+| List tenants       | `ADM_LSTTNT_3U4V`  | Returns paginated tenant details             |
 | Get tenant + keys  | `ADM_GETTNT_2A3B`  | Returns tenant details with API key metadata |
 | Update tenant      | `ADM_UPDTNT_4C5D`  | Updates name/email/webhook/status            |
 | Approve tenant     | `ADM_APPROV_6K7L`  | Status → ACTIVE, logs action                 |
@@ -1062,7 +1064,6 @@ Planned admin commands:
 
 | Action         | Command             | Effect                            |
 | -------------- | ------------------- | --------------------------------- |
-| List tenants   | `ADM_LSTTNT_3U4V`   | Paginated list with status        |
 | View batches   | `ADM_LSTBTCH_5W6X`  | All batches across all tenants    |
 | View audit log | `ADM_AUDITLOG_7Y8Z` | All admin actions with timestamps |
 
@@ -1315,6 +1316,7 @@ MTN MoMo Disbursement Platform
   │   └── ADM_CONFIRM2FA_4G5H
   ├── Admin
   │   ├── ADM_REGTNT_5I6J
+  │   ├── ADM_LSTTNT_3U4V
   │   ├── ADM_GETTNT_2A3B
   │   ├── ADM_UPDTNT_4C5D
   │   ├── ADM_APPROV_6K7L
