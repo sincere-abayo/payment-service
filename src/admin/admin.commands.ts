@@ -41,6 +41,28 @@ export class AdminCommands implements OnModuleInit {
     });
 
     this.registry.register({
+      code: 'ADM_DASHST_8D9E',
+      description: 'Get admin dashboard statistics.',
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (payload, context) => {
+        return this.adminService.getDashboardStatistics(context.adminId!, payload);
+      },
+    });
+
+    this.registry.register({
+      code: 'ADM_REPORT_0F1G',
+      description: 'Get date-filtered admin reports.',
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (payload, context) => {
+        return this.adminService.getReportsWithDateFilter(context.adminId!, payload);
+      },
+    });
+
+    this.registry.register({
       code: 'ADM_GETTNT_2A3B',
       description: 'Get tenant details with API key metadata.',
       roles: [Role.ADMIN],

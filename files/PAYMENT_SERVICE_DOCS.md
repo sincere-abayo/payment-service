@@ -660,6 +660,8 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
 | ------------------ | ----- | --- | ----------------- | -------------------------------- |
 | `ADM_REGTNT_5I6J`  | ADMIN | ✓   | ✓ (common header) | Register new tenant app          |
 | `ADM_LSTTNT_3U4V`  | ADMIN | ✓   | ✓ (common header) | List all tenants with details    |
+| `ADM_DASHST_8D9E`  | ADMIN | ✓   | ✓ (common header) | Dashboard statistics (date-aware) |
+| `ADM_REPORT_0F1G`  | ADMIN | ✓   | ✓ (common header) | Reports with date filters        |
 | `ADM_GETTNT_2A3B`  | ADMIN | ✓   | ✓ (common header) | Get tenant with API key metadata |
 | `ADM_UPDTNT_4C5D`  | ADMIN | ✓   | ✓ (common header) | Update tenant profile data       |
 | `ADM_APPROV_6K7L`  | ADMIN | ✓   | ✓ (common header) | Approve pending tenant           |
@@ -1051,6 +1053,8 @@ Set `MTN_ENVIRONMENT=sandbox` for development and testing.
 | ------------------ | ------------------ | -------------------------------------------- |
 | Register tenant    | `ADM_REGTNT_5I6J`  | Creates TenantApp (PENDING)                  |
 | List tenants       | `ADM_LSTTNT_3U4V`  | Returns paginated tenant details             |
+| Dashboard stats    | `ADM_DASHST_8D9E`  | Returns KPI counters for a date range        |
+| Reports            | `ADM_REPORT_0F1G`  | Returns trends and top tenants by date range |
 | Get tenant + keys  | `ADM_GETTNT_2A3B`  | Returns tenant details with API key metadata |
 | Update tenant      | `ADM_UPDTNT_4C5D`  | Updates name/email/webhook/status            |
 | Approve tenant     | `ADM_APPROV_6K7L`  | Status → ACTIVE, logs action                 |
@@ -1317,6 +1321,8 @@ MTN MoMo Disbursement Platform
   ├── Admin
   │   ├── ADM_REGTNT_5I6J
   │   ├── ADM_LSTTNT_3U4V
+  │   ├── ADM_DASHST_8D9E
+  │   ├── ADM_REPORT_0F1G
   │   ├── ADM_GETTNT_2A3B
   │   ├── ADM_UPDTNT_4C5D
   │   ├── ADM_APPROV_6K7L

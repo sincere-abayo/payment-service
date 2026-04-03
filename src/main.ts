@@ -38,6 +38,14 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
     status: 'ACTIVE',
     q: 'acme',
   },
+  ADM_DASHST_8D9E: {
+    fromDate: '2026-03-01T00:00:00.000Z',
+    toDate: '2026-03-31T23:59:59.999Z',
+  },
+  ADM_REPORT_0F1G: {
+    fromDate: '2026-03-01T00:00:00.000Z',
+    toDate: '2026-03-31T23:59:59.999Z',
+  },
   ADM_GETTNT_2A3B: {
     tenantId: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
   },
@@ -150,6 +158,77 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
           partiallyFailed: 0,
           processing: 0,
         },
+      },
+    ],
+  },
+  ADM_DASHST_8D9E: {
+    range: {
+      from: '2026-03-01T00:00:00.000Z',
+      to: '2026-03-31T23:59:59.999Z',
+    },
+    tenants: {
+      total: 12,
+      byStatus: {
+        ACTIVE: 8,
+        PENDING: 2,
+        SUSPENDED: 1,
+        REVOKED: 1,
+      },
+    },
+    batches: {
+      total: 42,
+      totalAmount: 482000,
+      totalCharges: 6300,
+      byStatus: {
+        COMPLETED: 40,
+        PARTIALLY_FAILED: 1,
+        PROCESSING: 1,
+      },
+    },
+    jobs: {
+      byStatus: {
+        SUCCESS: { count: 251, totalAmount: 482000 },
+      },
+    },
+    webhooks: {
+      byStatus: {
+        SUCCESS: 40,
+        FAILED: 2,
+      },
+    },
+  },
+  ADM_REPORT_0F1G: {
+    range: {
+      from: '2026-03-01T00:00:00.000Z',
+      to: '2026-03-31T23:59:59.999Z',
+    },
+    summary: {
+      totalBatches: 42,
+      totalJobs: 251,
+      totalWebhooks: 42,
+      totalAmount: 482000,
+      totalCharges: 6300,
+    },
+    topTenants: [
+      {
+        tenantId: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
+        name: 'Acme Finance',
+        email: 'ops@acme.example',
+        batchCount: 12,
+        totalAmount: 162000,
+        totalCharges: 1800,
+      },
+    ],
+    daily: [
+      {
+        date: '2026-03-20',
+        batches: 3,
+        batchAmount: 40000,
+        batchCharges: 500,
+        successfulJobs: 18,
+        failedJobs: 0,
+        webhooksSuccess: 3,
+        webhooksFailed: 0,
       },
     ],
   },

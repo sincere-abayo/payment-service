@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
-import { TenantStatus } from '@prisma/client';
+import { Prisma, TenantStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -151,6 +151,242 @@ export class AdminService {
           processing: tenant.batches.filter((batch) => batch.status === 'PROCESSING').length,
         },
       })),
+    };
+  }
+
+  async getDashboardStatistics(
+    adminId: string,
+    payload: { fromDate?: string; toDate?: string },
+  ) {
+    const range = this.resolveDateRange(payload, { defaultLastDays: 30 });
+    const createdAtFilter: Prisma.DateTimeFilter = {
+      gte: range.from,
+      lte: range.to,
+    };
+
+    const [tenantTotal, tenantByStatus, batchAggregate, batchByStatus, jobByStatus, webhookByStatus] =
+      await this.prisma.$transaction([
+        this.prisma.tenantApp.count({ where: { createdAt: createdAtFilter } }),
+        this.prisma.tenantApp.groupBy({
+          by: ['status'],
+          where: { createdAt: createdAtFilter },
+          orderBy: { status: 'asc' },
+          _count: { _all: true },
+        }),
+        this.prisma.disbursementBatch.aggregate({
+          where: { createdAt: createdAtFilter },
+          _count: { _all: true },
+          _sum: { totalAmount: true, totalCharges: true },
+        }),
+        this.prisma.disbursementBatch.groupBy({
+          by: ['status'],
+          where: { createdAt: createdAtFilter },
+          orderBy: { status: 'asc' },
+          _count: { _all: true },
+        }),
+        this.prisma.disbursementJob.groupBy({
+          by: ['status'],
+          where: { batch: { createdAt: createdAtFilter } },
+          orderBy: { status: 'asc' },
+          _count: { _all: true },
+          _sum: { amount: true },
+        }),
+        this.prisma.webhookLog.groupBy({
+          by: ['status'],
+          where: { createdAt: createdAtFilter },
+          orderBy: { status: 'asc' },
+          _count: { _all: true },
+        }),
+      ]);
+
+    await this.logAction(adminId, {
+      action: 'VIEWED_DASHBOARD_STATS',
+      targetType: 'Dashboard',
+      targetId: 'summary',
+      note: `from=${range.from.toISOString()},to=${range.to.toISOString()}`,
+    });
+
+    return {
+      range: {
+        from: range.from.toISOString(),
+        to: range.to.toISOString(),
+      },
+      tenants: {
+        total: tenantTotal,
+        byStatus: this.toCountMap(tenantByStatus),
+      },
+      batches: {
+        total: batchAggregate._count._all,
+        totalAmount: batchAggregate._sum.totalAmount ?? 0,
+        totalCharges: batchAggregate._sum.totalCharges ?? 0,
+        byStatus: this.toCountMap(batchByStatus),
+      },
+      jobs: {
+        byStatus: jobByStatus.reduce<Record<string, { count: number; totalAmount: number }>>(
+          (acc, row) => {
+            acc[row.status] = {
+              count: this.extractCountAll(row),
+              totalAmount: this.extractSumNumber(row, 'amount'),
+            };
+            return acc;
+          },
+          {},
+        ),
+      },
+      webhooks: {
+        byStatus: this.toCountMap(webhookByStatus),
+      },
+    };
+  }
+
+  async getReportsWithDateFilter(
+    adminId: string,
+    payload: { fromDate?: string; toDate?: string },
+  ) {
+    const range = this.resolveDateRange(payload, { requireExplicit: true });
+    const createdAtFilter: Prisma.DateTimeFilter = {
+      gte: range.from,
+      lte: range.to,
+    };
+
+    const [batches, jobs, webhookLogs, topTenantRows] = await this.prisma.$transaction([
+      this.prisma.disbursementBatch.findMany({
+        where: { createdAt: createdAtFilter },
+        select: {
+          id: true,
+          tenantId: true,
+          createdAt: true,
+          status: true,
+          totalAmount: true,
+          totalCharges: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.disbursementJob.findMany({
+        where: { batch: { createdAt: createdAtFilter } },
+        select: {
+          createdAt: true,
+          status: true,
+          amount: true,
+        },
+      }),
+      this.prisma.webhookLog.findMany({
+        where: { createdAt: createdAtFilter },
+        select: {
+          createdAt: true,
+          status: true,
+        },
+      }),
+      this.prisma.disbursementBatch.groupBy({
+        by: ['tenantId'],
+        where: { createdAt: createdAtFilter },
+        _count: { _all: true },
+        _sum: { totalAmount: true, totalCharges: true },
+        orderBy: { _sum: { totalAmount: 'desc' } },
+        take: 10,
+      }),
+    ]);
+
+    const tenantIds = topTenantRows.map((row) => row.tenantId);
+    const tenantMap = new Map<string, { id: string; name: string; email: string }>();
+    if (tenantIds.length) {
+      const tenants = await this.prisma.tenantApp.findMany({
+        where: { id: { in: tenantIds } },
+        select: { id: true, name: true, email: true },
+      });
+      for (const tenant of tenants) {
+        tenantMap.set(tenant.id, tenant);
+      }
+    }
+
+    const daily = new Map<
+      string,
+      {
+        batches: number;
+        batchAmount: number;
+        batchCharges: number;
+        successfulJobs: number;
+        failedJobs: number;
+        webhooksSuccess: number;
+        webhooksFailed: number;
+      }
+    >();
+
+    const ensureDaily = (date: string) => {
+      if (!daily.has(date)) {
+        daily.set(date, {
+          batches: 0,
+          batchAmount: 0,
+          batchCharges: 0,
+          successfulJobs: 0,
+          failedJobs: 0,
+          webhooksSuccess: 0,
+          webhooksFailed: 0,
+        });
+      }
+
+      return daily.get(date)!;
+    };
+
+    for (const batch of batches) {
+      const date = this.toIsoDate(batch.createdAt);
+      const row = ensureDaily(date);
+      row.batches += 1;
+      row.batchAmount += batch.totalAmount;
+      row.batchCharges += batch.totalCharges;
+    }
+
+    for (const job of jobs) {
+      const date = this.toIsoDate(job.createdAt);
+      const row = ensureDaily(date);
+      if (job.status === 'SUCCESS') {
+        row.successfulJobs += 1;
+      } else if (job.status === 'FAILED') {
+        row.failedJobs += 1;
+      }
+    }
+
+    for (const webhook of webhookLogs) {
+      const date = this.toIsoDate(webhook.createdAt);
+      const row = ensureDaily(date);
+      if (webhook.status === 'SUCCESS') {
+        row.webhooksSuccess += 1;
+      }
+      if (webhook.status === 'FAILED') {
+        row.webhooksFailed += 1;
+      }
+    }
+
+    await this.logAction(adminId, {
+      action: 'VIEWED_REPORTS',
+      targetType: 'Report',
+      targetId: 'date-range',
+      note: `from=${range.from.toISOString()},to=${range.to.toISOString()}`,
+    });
+
+    return {
+      range: {
+        from: range.from.toISOString(),
+        to: range.to.toISOString(),
+      },
+      summary: {
+        totalBatches: batches.length,
+        totalJobs: jobs.length,
+        totalWebhooks: webhookLogs.length,
+        totalAmount: batches.reduce((sum, batch) => sum + batch.totalAmount, 0),
+        totalCharges: batches.reduce((sum, batch) => sum + batch.totalCharges, 0),
+      },
+      topTenants: topTenantRows.map((row) => ({
+        tenantId: row.tenantId,
+        name: tenantMap.get(row.tenantId)?.name ?? 'Unknown tenant',
+        email: tenantMap.get(row.tenantId)?.email ?? null,
+        batchCount: this.extractCountAll(row),
+        totalAmount: this.extractSumNumber(row, 'totalAmount'),
+        totalCharges: this.extractSumNumber(row, 'totalCharges'),
+      })),
+      daily: Array.from(daily.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, row]) => ({ date, ...row })),
     };
   }
 
@@ -385,6 +621,68 @@ export class AdminService {
     }
 
     return normalized as TenantStatus;
+  }
+
+  private resolveDateRange(
+    payload: { fromDate?: string; toDate?: string },
+    options: { requireExplicit?: boolean; defaultLastDays?: number } = {},
+  ) {
+    const { requireExplicit = false, defaultLastDays = 30 } = options;
+    const fromRaw = payload.fromDate?.trim();
+    const toRaw = payload.toDate?.trim();
+
+    if (requireExplicit && (!fromRaw || !toRaw)) {
+      throw new BadRequestException('fromDate and toDate are required');
+    }
+
+    const to = toRaw ? new Date(toRaw) : new Date();
+    const from = fromRaw
+      ? new Date(fromRaw)
+      : new Date(to.getTime() - defaultLastDays * 24 * 60 * 60 * 1000);
+
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      throw new BadRequestException('Invalid date format. Use ISO date-time strings');
+    }
+
+    if (from > to) {
+      throw new BadRequestException('fromDate must be less than or equal to toDate');
+    }
+
+    return { from, to };
+  }
+
+  private toIsoDate(value: Date): string {
+    return value.toISOString().slice(0, 10);
+  }
+
+  private toCountMap<T extends { status: string; _count?: unknown }>(
+    rows: T[],
+  ) {
+    return rows.reduce<Record<string, number>>((acc, row) => {
+      acc[row.status] = this.extractCountAll(row);
+      return acc;
+    }, {});
+  }
+
+  private extractCountAll(row: { _count?: unknown }): number {
+    if (!row || row._count === undefined || row._count === true || row._count === false) {
+      return 0;
+    }
+
+    const countValue = (row._count as Record<string, unknown>)._all;
+    return typeof countValue === 'number' ? countValue : 0;
+  }
+
+  private extractSumNumber(
+    row: { _sum?: unknown },
+    field: string,
+  ): number {
+    if (!row || row._sum === undefined || row._sum === true || row._sum === false) {
+      return 0;
+    }
+
+    const value = (row._sum as Record<string, unknown>)[field];
+    return typeof value === 'number' ? value : 0;
   }
 
   private createRawApiKey(): string {
