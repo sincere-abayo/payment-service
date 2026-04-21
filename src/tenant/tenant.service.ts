@@ -49,6 +49,7 @@ export class TenantService {
         status: batch.status,
         totalAmount: batch.totalAmount,
         totalCharges: batch.totalCharges,
+        senderPhone: batch.senderPhone,
         chargeReceiver: batch.chargeReceiver,
         jobCount: batch.jobs.length,
         successCount: batch.jobs.filter((job) => job.status === 'SUCCESS').length,
@@ -86,6 +87,7 @@ export class TenantService {
       status: batch.status,
       totalAmount: batch.totalAmount,
       totalCharges: batch.totalCharges,
+      senderPhone: batch.senderPhone,
       chargeReceiver: batch.chargeReceiver,
       userPseudoId: batch.userPseudoId,
       jobs: batch.jobs.map((job) => ({

@@ -21,6 +21,7 @@ type InitiateDisbursementPayload = {
   apiKey?: string;
   idempotencyKey?: string;
   userPseudoId?: string;
+  senderPhone?: string;
   totalAmount?: number;
   totalCharges?: number;
   chargeReceiver?: string;
@@ -41,7 +42,13 @@ export class DisbursementService {
 
     const idempotencyKey = this.requireString(payload.idempotencyKey, 'idempotencyKey');
     const userPseudoId = this.requireString(payload.userPseudoId, 'userPseudoId');
+    const senderPhone = this.requireString(payload.senderPhone, 'senderPhone');
     const chargeReceiver = this.requireString(payload.chargeReceiver, 'chargeReceiver');
+
+    if (senderPhone === chargeReceiver) {
+      throw new BadRequestException('senderPhone and chargeReceiver must be different');
+    }
+
     const totalAmount = this.requirePositiveInteger(payload.totalAmount, 'totalAmount');
     const totalCharges = this.requirePositiveInteger(payload.totalCharges, 'totalCharges');
     const recipients = this.requireRecipients(payload.recipients);
@@ -82,6 +89,7 @@ export class DisbursementService {
           tenantId,
           idempotencyKey,
           userPseudoId,
+          senderPhone,
           totalAmount,
           totalCharges,
           chargeReceiver,
@@ -194,6 +202,7 @@ export class DisbursementService {
       status: batch.status,
       totalAmount: batch.totalAmount,
       totalCharges: batch.totalCharges,
+      senderPhone: batch.senderPhone,
       chargeReceiver: batch.chargeReceiver,
       userPseudoId: batch.userPseudoId,
       jobs: batch.jobs.map((job) => ({

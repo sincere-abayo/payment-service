@@ -386,15 +386,16 @@ TenantApp ──────────── ApiKey
 
 #### `DisbursementBatch`
 
-| Field            | Type                | Notes                                                    |
-| ---------------- | ------------------- | -------------------------------------------------------- |
-| `id`             | UUID PK             |                                                          |
-| `tenantId`       | UUID FK → TenantApp |                                                          |
-| `userPseudoId`   | String              | End-user within the tenant app                           |
-| `totalAmount`    | Int                 | Sum of all recipient amounts (smallest unit)             |
-| `totalCharges`   | Int                 | Flat fee for the whole batch                             |
-| `chargeReceiver` | String              | Phone number receiving the charge                        |
-| `status`         | Enum                | `PENDING \| PROCESSING \| COMPLETED \| PARTIALLY_FAILED` |
+| Field            | Type                | Notes                                                            |
+| ---------------- | ------------------- | ---------------------------------------------------------------- |
+| `id`             | UUID PK             |                                                                  |
+| `tenantId`       | UUID FK → TenantApp |                                                                  |
+| `userPseudoId`   | String              | End-user within the tenant app                                   |
+| `senderPhone`    | String              | Source wallet number used to fund all payouts and fees           |
+| `totalAmount`    | Int                 | Sum of all recipient amounts (smallest unit)                     |
+| `totalCharges`   | Int                 | Flat fee for the whole batch                                     |
+| `chargeReceiver` | String              | Phone that receives charge amount (must differ from senderPhone) |
+| `status`         | Enum                | `PENDING \| PROCESSING \| COMPLETED \| PARTIALLY_FAILED`         |
 
 #### `DisbursementJob`
 
@@ -752,6 +753,7 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
   "apiKey": "momo_live_xxxxxxxxxxxxxxxxxxxx",
   "idempotencyKey": "idem_20260403_0001",
   "userPseudoId": "user_abc123",
+  "senderPhone": "0788000000",
   "totalAmount": 35000,
   "totalCharges": 500,
   "chargeReceiver": "0788000000",
@@ -766,9 +768,11 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
 
 // Validation rules:
 // - idempotencyKey is required and unique per tenant
+// - senderPhone is required
+// - chargeReceiver is required
+// - senderPhone must be different from chargeReceiver
 // - sum(recipients[].amount) must equal totalAmount
 // - totalCharges > 0
-// - chargeReceiver must be valid phone format
 // - recipients[] min 1 item
 
 // Response
@@ -800,7 +804,7 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
    └── Validate: sum(amounts) === totalAmount
    └── Create DisbursementBatch (status: PENDING)
    └── Create 5 DisbursementJob rows (type: PAYOUT)
-   └── Create 1 DisbursementJob row  (type: CHARGE, phone: chargeReceiver, amount: totalCharges)
+  └── Create 1 DisbursementJob row  (type: CHARGE, phone: chargeReceiver, amount: totalCharges)
    └── Update batch status → PROCESSING
    └── Enqueue all 6 jobs into BullMQ queue "disbursement"
    └── Return { batchId, status: PROCESSING, jobCount: 6 }

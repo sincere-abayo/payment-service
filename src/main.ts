@@ -81,9 +81,10 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
     apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
     idempotencyKey: 'idem_20260403_0001',
     userPseudoId: 'user_abc123',
+    senderPhone: '0788000000',
     totalAmount: 35000,
     totalCharges: 500,
-    chargeReceiver: '0788000000',
+    chargeReceiver: '0789000000',
     recipients: [
       { phone: '0781111111', amount: 2000 },
       { phone: '0782222222', amount: 3000 },
@@ -301,7 +302,8 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
     status: 'COMPLETED',
     totalAmount: 35000,
     totalCharges: 500,
-    chargeReceiver: '0788000000',
+    senderPhone: '0788000000',
+    chargeReceiver: '0789000000',
     userPseudoId: 'user_abc123',
     jobs: [
       {
@@ -327,7 +329,8 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
         status: 'COMPLETED',
         totalAmount: 35000,
         totalCharges: 500,
-        chargeReceiver: '0788000000',
+        senderPhone: '0788000000',
+        chargeReceiver: '0789000000',
         jobCount: 6,
         successCount: 6,
         createdAt: '2026-04-03T00:00:00.000Z',
@@ -340,7 +343,8 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
     status: 'COMPLETED',
     totalAmount: 35000,
     totalCharges: 500,
-    chargeReceiver: '0788000000',
+    senderPhone: '0788000000',
+    chargeReceiver: '0789000000',
     userPseudoId: 'user_abc123',
     jobs: [
       {

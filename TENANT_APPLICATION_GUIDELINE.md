@@ -49,9 +49,10 @@ Required request body fields:
 - apiKey: string (raw active tenant API key)
 - idempotencyKey: string (required, unique per tenant for the same logical request)
 - userPseudoId: string (required)
+- senderPhone: string (required, number that authorizes/holds total funds)
 - totalAmount: positive integer (required)
 - totalCharges: positive integer (required)
-- chargeReceiver: non-empty string (required)
+- chargeReceiver: non-empty string (required, must be different from senderPhone and receives charge amount)
 - recipients: non-empty array (required)
 
 Each recipients item must include:
@@ -64,6 +65,7 @@ Validation rules enforced by service:
 - recipients must be non-empty
 - each recipient amount must be a positive integer
 - totalAmount must equal sum(recipients.amount)
+- senderPhone and chargeReceiver are both required and must be different
 - tenant apiKey must exist, be active, and belong to an ACTIVE tenant
 
 Idempotency behavior:
@@ -101,9 +103,10 @@ Body:
 "apiKey": "TENANT_RAW_API_KEY",
 "idempotencyKey": "disb-2026-04-04-acme-001",
 "userPseudoId": "user-92f1",
+"senderPhone": "256700000111",
 "totalAmount": 150000,
 "totalCharges": 3000,
-"chargeReceiver": "256700000111",
+"chargeReceiver": "256700000999",
 "recipients": [
 { "phone": "256700000001", "amount": 50000 },
 { "phone": "256700000002", "amount": 100000 }
@@ -138,7 +141,7 @@ DSB_STATUS_4E5F success response includes:
 
 - batchId
 - status
-- totals and chargeReceiver
+- totals, senderPhone, and chargeReceiver
 - userPseudoId
 - jobs[] with jobId, phone, amount, type, status, mtnRef, failReason
 - createdAt, updatedAt

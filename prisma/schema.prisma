@@ -81,6 +81,7 @@ model DisbursementBatch {
   tenantId       String
   idempotencyKey String?
   userPseudoId   String
+  senderPhone    String
   totalAmount    Int
   totalCharges   Int
   chargeReceiver String
@@ -95,6 +96,7 @@ model DisbursementBatch {
   @@index([tenantId])
   @@index([idempotencyKey])
   @@index([userPseudoId])
+  @@index([senderPhone])
   @@index([status])
   @@map("disbursement_batches")
 }
