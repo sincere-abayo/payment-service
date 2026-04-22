@@ -18,7 +18,7 @@ COPY . .
 RUN npm run build
 
 # Verify dist directory was created
-RUN ls -la dist/ && ls -la dist/main.js || (echo "Build failed - dist directory not found" && exit 1)
+RUN ls -laR dist/ || (echo "Build failed - dist directory not found" && exit 1)
 
 # Stage 2: Production
 FROM node:20-alpine AS production

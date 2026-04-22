@@ -8,4 +8,12 @@ echo "Running database migrations..."
 npx prisma migrate deploy
 
 echo "Starting application..."
-exec node dist/main
+if [ -f "dist/main.js" ]; then
+    exec node dist/main
+elif [ -f "dist/src/main.js" ]; then
+    exec node dist/src/main
+else
+    echo "Error: Cannot find main.js in dist/ or dist/src/"
+    ls -laR dist/
+    exit 1
+fi
