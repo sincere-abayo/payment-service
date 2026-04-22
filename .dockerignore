@@ -36,9 +36,6 @@ docs
 # Postman
 postman
 
-# Prisma
-prisma/migrations
-
 # Test coverage
 coverage
 .nyc_output
