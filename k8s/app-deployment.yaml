@@ -1,0 +1,177 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service-app
+  namespace: payment-service
+  labels:
+    app: payment-service-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payment-service-app
+  template:
+    metadata:
+      labels:
+        app: payment-service-app
+    spec:
+      containers:
+      - name: app
+        image: payment-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3030
+        env:
+        # ConfigMap variables
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: NODE_ENV
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: PORT
+        - name: ALLOWED_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: ALLOWED_ORIGINS
+        - name: POSTGRES_USER
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: POSTGRES_USER
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: POSTGRES_DB
+        - name: POSTGRES_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: POSTGRES_HOST
+        - name: POSTGRES_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: POSTGRES_PORT
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: REDIS_PORT
+        - name: JWT_EXPIRES_IN
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: JWT_EXPIRES_IN
+        - name: MTN_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: MTN_ENVIRONMENT
+        - name: MTN_CALLBACK_URL
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: MTN_CALLBACK_URL
+        - name: RUN_SEED
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: RUN_SEED
+        - name: THROTTLE_TTL
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: THROTTLE_TTL
+        - name: THROTTLE_LIMIT
+          valueFrom:
+            configMapKeyRef:
+              name: payment-service-config
+              key: THROTTLE_LIMIT
+        # Secret variables
+        - name: COMMON_X_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: payment-service-secret
+              key: COMMON_X_API_KEY
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: payment-service-secret
+              key: POSTGRES_PASSWORD
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: payment-service-secret
+              key: DATABASE_URL
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: payment-service-secret
+              key: REDIS_PASSWORD
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: payment-service-secret
+              key: JWT_SECRET
+        - name: MTN_SUBSCRIPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: payment-service-secret
+              key: MTN_SUBSCRIPTION_KEY
+        - name: MTN_API_USER
+          valueFrom:
+            secretKeyRef:
+              name: payment-service-secret
+              key: MTN_API_USER
+        - name: MTN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: payment-service-secret
+              key: MTN_API_KEY
+        - name: MTN_BASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: payment-service-secret
+              key: MTN_BASE_URL
+        - name: ADMIN_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: payment-service-secret
+              key: ADMIN_EMAIL
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: payment-service-secret
+              key: ADMIN_PASSWORD
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3030
+          initialDelaySeconds: 40
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3030
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5

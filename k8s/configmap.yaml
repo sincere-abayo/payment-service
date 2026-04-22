@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payment-service-config
+  namespace: payment-service
+data:
+  NODE_ENV: "production"
+  PORT: "3030"
+  ALLOWED_ORIGINS: "http://109.123.245.58:3030"
+  POSTGRES_USER: "momo"
+  POSTGRES_DB: "momo_db"
+  POSTGRES_HOST: "postgres-service"
+  POSTGRES_PORT: "5432"
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  JWT_EXPIRES_IN: "8h"
+  MTN_ENVIRONMENT: "production"
+  MTN_CALLBACK_URL: "http://109.123.245.58:3030/mtn-callback"
+  RUN_SEED: "true"
+  THROTTLE_TTL: "60000"
+  THROTTLE_LIMIT: "60"
