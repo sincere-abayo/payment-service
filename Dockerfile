@@ -41,6 +41,9 @@ COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
 COPY --chown=nestjs:nodejs docker-entrypoint.sh /app/
 
+# Change ownership of node_modules to nestjs user
+RUN chown -R nestjs:nodejs node_modules
+
 # Switch to non-root user
 USER nestjs
 
