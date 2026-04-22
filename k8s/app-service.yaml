@@ -9,6 +9,7 @@ spec:
   selector:
     app: payment-service-app
   ports:
-  - port: 3030
-    targetPort: 3030
+    - port: 3009
+      targetPort: 3009
+      nodePort: 30009
   type: NodePort

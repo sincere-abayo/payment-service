@@ -139,13 +139,14 @@ docker-compose down -v
 
 #### 3. Access the Application
 
-- **API**: `http://109.123.245.58:3030`
-- **Swagger Docs**: `http://109.123.245.58:3030/docs`
+- **API**: `http://109.123.245.58:3009`
+- **Swagger Docs**: `http://109.123.245.58:3009/docs`
 
 #### 4. Docker Compose Services
 
 The docker-compose.yml includes:
-- **payment-service-app**: NestJS application (port 3030)
+
+- **payment-service-app**: NestJS application (port 3009)
 - **postgres**: PostgreSQL database (port 5432)
 - **redis**: Redis for BullMQ (port 6379)
 
@@ -249,27 +250,27 @@ Access via: `http://109.123.245.58:<NODEPORT>`
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NODE_ENV` | Environment (development/production) | `development` |
-| `PORT` | Application port | `3000` |
-| `ALLOWED_ORIGINS` | CORS allowed origins | `*` |
-| `COMMON_X_API_KEY` | Common API key for all requests | Required |
-| `DATABASE_URL` | PostgreSQL connection string | Required |
-| `REDIS_HOST` | Redis host | `localhost` |
-| `REDIS_PORT` | Redis port | `6379` |
-| `REDIS_PASSWORD` | Redis password | Required |
-| `JWT_SECRET` | JWT signing secret | Required |
-| `JWT_EXPIRES_IN` | JWT expiration time | `8h` |
-| `MTN_BASE_URL` | MTN API base URL | Required |
-| `MTN_SUBSCRIPTION_KEY` | MTN subscription key | Required |
-| `MTN_API_USER` | MTN API user | Required |
-| `MTN_API_KEY` | MTN API key | Required |
-| `MTN_ENVIRONMENT` | MTN environment (sandbox/production) | `sandbox` |
-| `MTN_CALLBACK_URL` | MTN callback URL | Required |
-| `RUN_SEED` | Run database seed | `false` |
-| `ADMIN_EMAIL` | Admin email for seeding | Required |
-| `ADMIN_PASSWORD` | Admin password for seeding | Required |
+| Variable               | Description                          | Default       |
+| ---------------------- | ------------------------------------ | ------------- |
+| `NODE_ENV`             | Environment (development/production) | `development` |
+| `PORT`                 | Application port                     | `3000`        |
+| `ALLOWED_ORIGINS`      | CORS allowed origins                 | `*`           |
+| `COMMON_X_API_KEY`     | Common API key for all requests      | Required      |
+| `DATABASE_URL`         | PostgreSQL connection string         | Required      |
+| `REDIS_HOST`           | Redis host                           | `localhost`   |
+| `REDIS_PORT`           | Redis port                           | `6379`        |
+| `REDIS_PASSWORD`       | Redis password                       | Required      |
+| `JWT_SECRET`           | JWT signing secret                   | Required      |
+| `JWT_EXPIRES_IN`       | JWT expiration time                  | `8h`          |
+| `MTN_BASE_URL`         | MTN API base URL                     | Required      |
+| `MTN_SUBSCRIPTION_KEY` | MTN subscription key                 | Required      |
+| `MTN_API_USER`         | MTN API user                         | Required      |
+| `MTN_API_KEY`          | MTN API key                          | Required      |
+| `MTN_ENVIRONMENT`      | MTN environment (sandbox/production) | `sandbox`     |
+| `MTN_CALLBACK_URL`     | MTN callback URL                     | Required      |
+| `RUN_SEED`             | Run database seed                    | `false`       |
+| `ADMIN_EMAIL`          | Admin email for seeding              | Required      |
+| `ADMIN_PASSWORD`       | Admin password for seeding           | Required      |
 
 ## API Documentation
 
@@ -328,6 +329,7 @@ npx prisma studio
 ## Postman Collection
 
 The Postman collection includes:
+
 - Comprehensive request descriptions
 - Response field documentation
 - Error response examples
@@ -412,5 +414,6 @@ Private project - All rights reserved
 ## Support
 
 For issues and questions, refer to:
+
 - `PAYMENT_SERVICE_DOCS.md` - Detailed API documentation
 - `TENANT_APPLICATION_GUIDELINE.md` - Tenant integration guide
