@@ -14,9 +14,6 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Generate Prisma client
-RUN npx prisma generate
-
 # Build the application
 RUN npm run build
 
@@ -42,9 +39,7 @@ RUN npm install --production && \
 # Copy built application from builder
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
-
-# Generate Prisma client for production
-RUN npx prisma generate
+COPY --chown=nestjs:nodejs docker-entrypoint.sh /app/
 
 # Switch to non-root user
 USER nestjs
@@ -57,7 +52,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3030/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Use dumb-init to handle signals properly
-ENTRYPOINT ["dumb-init", "--"]
-
-# Start the application
-CMD ["node", "dist/main"]
+ENTRYPOINT ["dumb-init", "--", "/app/docker-entrypoint.sh"]
