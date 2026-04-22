@@ -139,8 +139,8 @@ docker-compose down -v
 
 #### 3. Access the Application
 
-- **API**: `http://109.123.245.58:3009`
-- **Swagger Docs**: `http://109.123.245.58:3009/docs`
+- **API**: `http://142.93.24.178:3009`
+- **Swagger Docs**: `http://142.93.24.178:3009/docs`
 
 #### 4. Docker Compose Services
 

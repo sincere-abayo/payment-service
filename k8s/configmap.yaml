@@ -6,7 +6,7 @@ metadata:
 data:
   NODE_ENV: "production"
   PORT: "3009"
-  ALLOWED_ORIGINS: "http://109.123.245.58:3009"
+  ALLOWED_ORIGINS: "*"
   POSTGRES_USER: "momo"
   POSTGRES_DB: "momo_db"
   POSTGRES_HOST: "postgres-service"
@@ -15,7 +15,7 @@ data:
   REDIS_PORT: "6379"
   JWT_EXPIRES_IN: "8h"
   MTN_ENVIRONMENT: "production"
-  MTN_CALLBACK_URL: "http://109.123.245.58:3009/mtn-callback"
+  MTN_CALLBACK_URL: "http://142.93.24.178:3009/mtn-callback"
   RUN_SEED: "true"
   THROTTLE_TTL: "60000"
   THROTTLE_LIMIT: "60"

@@ -50,7 +50,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3009
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://109.123.245.58:3009}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
       COMMON_X_API_KEY: ${COMMON_X_API_KEY}
       DATABASE_URL: postgresql://${POSTGRES_USER:-momo}:${POSTGRES_PASSWORD:-secret}@postgres:5432/${POSTGRES_DB:-momo_db}?schema=public
       POSTGRES_USER: ${POSTGRES_USER:-momo}
