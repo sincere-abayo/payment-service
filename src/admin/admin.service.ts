@@ -252,7 +252,7 @@ export class AdminService {
     adminId: string,
     payload: { fromDate?: string; toDate?: string },
   ) {
-    const range = this.resolveDateRange(payload, { defaultLastDays: 365 * 10 });
+    const range = this.resolveDateRange(payload, { allTime: true });
     const createdAtFilter: Prisma.DateTimeFilter = {
       gte: range.from,
       lte: range.to,
@@ -634,9 +634,9 @@ export class AdminService {
 
   private resolveDateRange(
     payload: { fromDate?: string; toDate?: string },
-    options: { requireExplicit?: boolean; defaultLastDays?: number } = {},
+    options: { requireExplicit?: boolean; defaultLastDays?: number; allTime?: boolean } = {},
   ) {
-    const { requireExplicit = false, defaultLastDays = 30 } = options;
+    const { requireExplicit = false, defaultLastDays = 30, allTime = false } = options;
     const fromRaw = payload.fromDate?.trim();
     const toRaw = payload.toDate?.trim();
 
@@ -647,7 +647,9 @@ export class AdminService {
     const to = toRaw ? new Date(toRaw) : new Date();
     const from = fromRaw
       ? new Date(fromRaw)
-      : new Date(to.getTime() - defaultLastDays * 24 * 60 * 60 * 1000);
+      : allTime
+        ? new Date(0)
+        : new Date(to.getTime() - defaultLastDays * 24 * 60 * 60 * 1000);
 
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
       throw new BadRequestException('Invalid date format. Use ISO date-time strings');
