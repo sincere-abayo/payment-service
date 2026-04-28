@@ -465,7 +465,8 @@ async function bootstrap() {
   app.use(compression());
 
   app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') ?? '*',
+    origin: '*',
+    // origin: process.env.ALLOWED_ORIGINS?.split(',') ?? '*',
     methods: ['POST', 'GET', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-command'],
   });
