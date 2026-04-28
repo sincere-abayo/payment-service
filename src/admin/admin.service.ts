@@ -252,7 +252,7 @@ export class AdminService {
     adminId: string,
     payload: { fromDate?: string; toDate?: string },
   ) {
-    const range = this.resolveDateRange(payload, { requireExplicit: true });
+    const range = this.resolveDateRange(payload, { defaultLastDays: 365 * 10 });
     const createdAtFilter: Prisma.DateTimeFilter = {
       gte: range.from,
       lte: range.to,
