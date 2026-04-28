@@ -17,23 +17,32 @@ export class AdminService {
   ) {
     const status = this.normalizeTenantStatus(payload.status);
 
-    const tenant = await this.prisma.tenantApp.create({
-      data: {
-        name: payload.name,
-        email: payload.email,
-        webhookUrl: payload.webhookUrl,
-        status,
-      },
-    });
+    try {
+      const tenant = await this.prisma.tenantApp.create({
+        data: {
+          name: payload.name,
+          email: payload.email,
+          webhookUrl: payload.webhookUrl,
+          status,
+        },
+      });
 
-    await this.logAction(adminId, {
-      action: 'REGISTERED_TENANT',
-      targetType: 'TenantApp',
-      targetId: tenant.id,
-      note: `Registered tenant ${tenant.email}`,
-    });
+      await this.logAction(adminId, {
+        action: 'REGISTERED_TENANT',
+        targetType: 'TenantApp',
+        targetId: tenant.id,
+        note: `Registered tenant ${tenant.email}`,
+      });
 
-    return tenant;
+      return tenant;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new BadRequestException('A tenant with this email already exists');
+        }
+      }
+      throw error;
+    }
   }
 
   async getTenantWithApiKeys(adminId: string, tenantId: string) {
