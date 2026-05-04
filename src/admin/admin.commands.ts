@@ -165,5 +165,16 @@ export class AdminCommands implements OnModuleInit {
         );
       },
     });
+
+    this.registry.register({
+      code: 'ADM_LSTBTCH_0P1Q',
+      description: "List all disbursement batches for a specific tenant.",
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (payload, context) => {
+        return this.adminService.listTenantBatches(context.adminId!, payload);
+      },
+    });
   }
 }

@@ -106,6 +106,11 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
     apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
     batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
   },
+  ADM_LSTBTCH_0P1Q: {
+    tenantId: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
+    limit: 20,
+    offset: 0,
+  },
 };
 
 const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
@@ -359,6 +364,25 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
     ],
     createdAt: '2026-04-03T00:00:00.000Z',
     updatedAt: '2026-04-03T00:00:20.000Z',
+  },
+  ADM_LSTBTCH_0P1Q: {
+    total: 1,
+    limit: 20,
+    offset: 0,
+    items: [
+      {
+        batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
+        status: 'COMPLETED',
+        totalAmount: 35000,
+        totalCharges: 500,
+        senderPhone: '0788000000',
+        chargeReceiver: '0789000000',
+        jobCount: 6,
+        successCount: 6,
+        createdAt: '2026-04-03T00:00:00.000Z',
+        updatedAt: '2026-04-03T00:00:20.000Z',
+      },
+    ],
   },
 };
 

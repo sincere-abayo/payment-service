@@ -610,6 +610,68 @@ export class AdminService {
     return generated;
   }
 
+  async listTenantBatches(
+    adminId: string,
+    payload: { tenantId: string; limit?: number; offset?: number },
+  ) {
+    const tenant = await this.prisma.tenantApp.findUnique({ where: { id: payload.tenantId } });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    const limit =
+      typeof payload.limit === 'number' && Number.isInteger(payload.limit) && payload.limit > 0
+        ? Math.min(payload.limit, 200)
+        : 50;
+
+    const offset =
+      typeof payload.offset === 'number' && Number.isInteger(payload.offset) && payload.offset >= 0
+        ? payload.offset
+        : 0;
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.disbursementBatch.findMany({
+        where: { tenantId: payload.tenantId },
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: limit,
+        include: {
+          jobs: {
+            select: {
+              status: true,
+            },
+          },
+        },
+      }),
+      this.prisma.disbursementBatch.count({ where: { tenantId: payload.tenantId } }),
+    ]);
+
+    await this.logAction(adminId, {
+      action: 'LISTED_TENANT_BATCHES',
+      targetType: 'DisbursementBatch',
+      targetId: payload.tenantId,
+      note: `limit=${limit}, offset=${offset}`,
+    });
+
+    return {
+      total,
+      limit,
+      offset,
+      items: items.map((batch) => ({
+        batchId: batch.id,
+        status: batch.status,
+        totalAmount: batch.totalAmount,
+        totalCharges: batch.totalCharges,
+        senderPhone: batch.senderPhone,
+        chargeReceiver: batch.chargeReceiver,
+        jobCount: batch.jobs.length,
+        successCount: batch.jobs.filter((job) => job.status === 'SUCCESS').length,
+        createdAt: batch.createdAt,
+        updatedAt: batch.updatedAt,
+      })),
+    };
+  }
+
   private normalizeTenantStatus(status?: string): TenantStatus {
     if (!status) {
       return 'PENDING';
