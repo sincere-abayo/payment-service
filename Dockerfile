@@ -1,15 +1,15 @@
 # Multi-stage build for NestJS payment service
 # Stage 1: Build
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files (lockfile is required for reproducible npm ci)
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
-RUN npm install
+# Install all dependencies (incl. dev) for the build
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -21,7 +21,7 @@ RUN npm run build
 RUN ls -laR dist/ || (echo "Build failed - dist directory not found" && exit 1)
 
 # Stage 2: Production
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 WORKDIR /app
 
@@ -35,8 +35,9 @@ RUN addgroup -g 1001 -S nodejs && \
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies
-RUN npm install --production && \
+# Install production dependencies only
+# (prisma CLI is a runtime dependency: entrypoint runs generate + migrate deploy)
+RUN npm ci --omit=dev && \
     npm cache clean --force
 
 # Copy built application from builder
@@ -50,12 +51,12 @@ RUN chown -R nestjs:nodejs node_modules
 # Switch to non-root user
 USER nestjs
 
-# Expose port 3009
-EXPOSE 3009
+# Expose port (PORT env drives the app; defaults to 4040)
+EXPOSE 4040
 
-# Health check
+# Health check — uses PORT from environment (fallback 4040)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3009/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+    CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||4040)+'/health',(r)=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--", "/app/docker-entrypoint.sh"]
