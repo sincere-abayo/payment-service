@@ -10,11 +10,17 @@ import {
   DISBURSEMENT_QUEUE,
   JOB_PROCESS_TRANSFER,
 } from '../queue/queue.module';
+import { PaymentProviderService } from '../payment/payment-provider.service';
+import { toPrismaPaymentProvider } from '../payment/payment-provider.mapper';
 import { PrismaService } from '../prisma/prisma.service';
 
 type RecipientInput = {
   phone: string;
   amount: number;
+  /** Optional registered account name; Xentry returns the provider-validated name. */
+  name?: string;
+  /** Optional provider telecom code (e.g. 63510 for Xentry MTN MoMo payouts). */
+  telecomProviderId?: string;
 };
 
 type InitiateDisbursementPayload = {
@@ -25,6 +31,8 @@ type InitiateDisbursementPayload = {
   totalAmount?: number;
   totalCharges?: number;
   chargeReceiver?: string;
+  /** Optional registered account name for the charge receiver (required by Xentry). */
+  chargeReceiverName?: string;
   recipients?: RecipientInput[];
 };
 
@@ -32,6 +40,7 @@ type InitiateDisbursementPayload = {
 export class DisbursementService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly paymentProviders: PaymentProviderService,
     @InjectQueue(DISBURSEMENT_QUEUE) private readonly disbursementQueue: Queue,
   ) {}
 
@@ -48,6 +57,11 @@ export class DisbursementService {
     if (senderPhone === chargeReceiver) {
       throw new BadRequestException('senderPhone and chargeReceiver must be different');
     }
+
+    const chargeReceiverName =
+      payload.chargeReceiverName === undefined
+        ? undefined
+        : this.requireString(payload.chargeReceiverName, 'chargeReceiverName');
 
     const totalAmount = this.requirePositiveInteger(payload.totalAmount, 'totalAmount');
     const totalCharges = this.requirePositiveInteger(payload.totalCharges, 'totalCharges');
@@ -78,21 +92,30 @@ export class DisbursementService {
       return {
         batchId: existing.id,
         status: existing.status,
+        provider: existing.provider,
         jobCount: existing.jobs.length,
         message: `Idempotent replay: returning existing batch ${existing.id}.`,
       };
     }
+
+    const providerName = await this.paymentProviders.assertProviderConfigured(
+      'disbursement',
+      tenantId,
+    );
 
     const batch = await this.prisma.$transaction(async (tx) => {
       const createdBatch = await tx.disbursementBatch.create({
         data: {
           tenantId,
           idempotencyKey,
+          provider: toPrismaPaymentProvider(providerName),
           userPseudoId,
           senderPhone,
           totalAmount,
           totalCharges,
           chargeReceiver,
+          providerFee: 0,
+          totalCharged: totalAmount,
           status: BatchStatus.PROCESSING,
         },
       });
@@ -105,6 +128,8 @@ export class DisbursementService {
         phone: string;
         amount: number;
         jobType: JobType;
+        recipientName?: string;
+        telecomProviderId?: string;
       }> = [];
 
       for (const recipient of recipients) {
@@ -114,7 +139,10 @@ export class DisbursementService {
             phone: recipient.phone,
             amount: recipient.amount,
             jobType: JobType.PAYOUT,
+            providerFee: 0,
+            totalCharged: recipient.amount,
             status: JobStatus.QUEUED,
+            ...(recipient.name ? { recipientName: recipient.name } : {}),
           },
         });
 
@@ -126,6 +154,8 @@ export class DisbursementService {
           phone: recipient.phone,
           amount: recipient.amount,
           jobType: JobType.PAYOUT,
+          ...(recipient.name ? { recipientName: recipient.name } : {}),
+          ...(recipient.telecomProviderId ? { telecomProviderId: recipient.telecomProviderId } : {}),
         });
       }
 
@@ -135,7 +165,10 @@ export class DisbursementService {
           phone: chargeReceiver,
           amount: totalCharges,
           jobType: JobType.CHARGE,
+          providerFee: 0,
+          totalCharged: totalCharges,
           status: JobStatus.QUEUED,
+          ...(chargeReceiverName ? { recipientName: chargeReceiverName } : {}),
         },
       });
 
@@ -147,6 +180,7 @@ export class DisbursementService {
         phone: chargeReceiver,
         amount: totalCharges,
         jobType: JobType.CHARGE,
+        ...(chargeReceiverName ? { recipientName: chargeReceiverName } : {}),
       });
 
       return {
@@ -172,6 +206,7 @@ export class DisbursementService {
     return {
       batchId: batch.batch.id,
       status: batch.batch.status,
+      provider: providerName,
       jobCount: batch.queuedJobs.length,
       message: `Batch accepted. ${batch.queuedJobs.length} jobs queued (${recipients.length} payouts + 1 charge).`,
     };
@@ -200,6 +235,7 @@ export class DisbursementService {
     return {
       batchId: batch.id,
       status: batch.status,
+      provider: batch.provider,
       totalAmount: batch.totalAmount,
       totalCharges: batch.totalCharges,
       senderPhone: batch.senderPhone,
@@ -212,6 +248,7 @@ export class DisbursementService {
         type: job.jobType,
         status: job.status,
         mtnRef: job.mtnRef,
+        recipientName: job.recipientName,
         failReason: job.failReason,
       })),
       createdAt: batch.createdAt,
@@ -254,9 +291,27 @@ export class DisbursementService {
         throw new BadRequestException(`recipients[${index}] must include phone and positive integer amount`);
       }
 
+      const name = (recipient as RecipientInput).name;
+      const telecomProviderId = (recipient as RecipientInput).telecomProviderId;
+
+      if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
+        throw new BadRequestException(`recipients[${index}].name must be a non-empty string when provided`);
+      }
+
+      if (
+        telecomProviderId !== undefined &&
+        (typeof telecomProviderId !== 'string' || !telecomProviderId.trim())
+      ) {
+        throw new BadRequestException(
+          `recipients[${index}].telecomProviderId must be a non-empty string when provided`,
+        );
+      }
+
       return {
         phone: (recipient as RecipientInput).phone.trim(),
         amount: (recipient as RecipientInput).amount,
+        ...(name?.trim() ? { name: name.trim() } : {}),
+        ...(telecomProviderId?.trim() ? { telecomProviderId: telecomProviderId.trim() } : {}),
       };
     });
   }

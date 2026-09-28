@@ -4,3 +4,4 @@ postman
 .env
 .env.local
 .env.*.local
+.opencode/

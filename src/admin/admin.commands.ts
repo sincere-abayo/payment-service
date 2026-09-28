@@ -176,5 +176,71 @@ export class AdminCommands implements OnModuleInit {
         return this.adminService.listTenantBatches(context.adminId!, payload);
       },
     });
+
+    this.registry.register({
+      code: 'ADM_GETRTE_3E5G',
+      description: 'Get payment provider routing (default and per-flow providers).',
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (_payload, context) => {
+        return this.adminService.getProviderRouting(context.adminId!);
+      },
+    });
+
+    this.registry.register({
+      code: 'ADM_SETRTE_5I7K',
+      description: 'Set payment provider routing (default and per-flow providers).',
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (payload, context) => {
+        return this.adminService.setProviderRouting(context.adminId!, payload);
+      },
+    });
+
+    this.registry.register({
+      code: 'ADM_GETXTR_7M9O',
+      description: 'Get Xentry Pay settings (base URL, API key, webhook secret).',
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (_payload, context) => {
+        return this.adminService.getXentryPayConfig(context.adminId!);
+      },
+    });
+
+    this.registry.register({
+      code: 'ADM_SETXTR_1P3R',
+      description: 'Set Xentry Pay settings (base URL, API key, webhook secret).',
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (payload, context) => {
+        return this.adminService.setXentryPayConfig(context.adminId!, payload);
+      },
+    });
+
+    this.registry.register({
+      code: 'ADM_GETMTN_5T7V',
+      description: 'Get MTN MoMo direct API settings.',
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (_payload, context) => {
+        return this.adminService.getMtnPayConfig(context.adminId!);
+      },
+    });
+
+    this.registry.register({
+      code: 'ADM_SETMTN_9X1Z',
+      description: 'Set MTN MoMo direct API settings.',
+      roles: [Role.ADMIN],
+      requiresJwt: true,
+      requiresApiKey: false,
+      handler: async (payload, context) => {
+        return this.adminService.setMtnPayConfig(context.adminId!, payload);
+      },
+    });
   }
 }

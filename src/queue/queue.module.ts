@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 
 export const DISBURSEMENT_QUEUE = 'disbursement';
 export const JOB_PROCESS_TRANSFER = 'process-transfer';
+export const JOB_CHECK_PAYOUT_STATUS = 'check-payout-status';
 export const WEBHOOK_QUEUE = 'webhook';
 export const JOB_SEND_WEBHOOK = 'send-webhook';
 

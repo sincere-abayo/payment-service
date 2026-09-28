@@ -6,7 +6,7 @@ import { AdminModule } from './admin/admin.module';
 import { DisbursementModule } from './disbursement/disbursement.module';
 import { HealthModule } from './health/health.module';
 import { MasterModule } from './master/master.module';
-import { MtnModule } from './mtn/mtn.module';
+import { PaymentProviderModule } from './payment/payment-provider.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
 import { TenantModule } from './tenant/tenant.module';
@@ -31,7 +31,7 @@ import { WebhookModule } from './webhook/webhook.module';
     }),
     PrismaModule,
     QueueModule,
-    MtnModule,
+    PaymentProviderModule,
     AuthModule,
     AdminModule,
     TenantModule,

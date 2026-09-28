@@ -69,13 +69,10 @@ REDIS_PASSWORD=your_redis_password
 JWT_SECRET=your_jwt_secret_min_32_chars
 JWT_EXPIRES_IN=8h
 
-# MTN MoMo
-MTN_BASE_URL=https://sandbox.momodeveloper.mtn.com
-MTN_SUBSCRIPTION_KEY=your_subscription_key
-MTN_API_USER=your_api_user
-MTN_API_KEY=your_api_key
-MTN_ENVIRONMENT=sandbox
-MTN_CALLBACK_URL=http://localhost:3000/mtn-callback
+# Provider settings are stored in the database (not env):
+#   ADM_SETMTN_9X1Z  -> MTN MoMo credentials
+#   ADM_SETXTR_1P3R  -> Xentry (XentriPay) baseUrl / apiKey / webhookSecret
+#   ADM_SETRTE_5I7K  -> active provider per flow (mtn | xentry)
 
 # Seeding
 RUN_SEED=true
@@ -262,12 +259,7 @@ Access via: `http://109.123.245.58:<NODEPORT>`
 | `REDIS_PASSWORD`       | Redis password                       | Required      |
 | `JWT_SECRET`           | JWT signing secret                   | Required      |
 | `JWT_EXPIRES_IN`       | JWT expiration time                  | `8h`          |
-| `MTN_BASE_URL`         | MTN API base URL                     | Required      |
-| `MTN_SUBSCRIPTION_KEY` | MTN subscription key                 | Required      |
-| `MTN_API_USER`         | MTN API user                         | Required      |
-| `MTN_API_KEY`          | MTN API key                          | Required      |
-| `MTN_ENVIRONMENT`      | MTN environment (sandbox/production) | `sandbox`     |
-| `MTN_CALLBACK_URL`     | MTN callback URL                     | Required      |
+| _(provider settings)_  | MTN/Xentry credentials & routing   | DB (see below) |
 | `RUN_SEED`             | Run database seed                    | `false`       |
 | `ADMIN_EMAIL`          | Admin email for seeding              | Required      |
 | `ADMIN_PASSWORD`       | Admin password for seeding           | Required      |
@@ -336,7 +328,7 @@ The Postman collection includes:
 - Workflow examples
 - Quick start guides
 
-Import `postman/payment-service.postman_collection.json` into Postman.
+Import `postman/Payment-Service-Postman_collection.json` into Postman (regenerate with `npm run docs:generate-postman` after adding commands).
 
 ## Security Considerations
 

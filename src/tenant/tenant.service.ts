@@ -47,6 +47,7 @@ export class TenantService {
       items: items.map((batch) => ({
         batchId: batch.id,
         status: batch.status,
+        provider: batch.provider,
         totalAmount: batch.totalAmount,
         totalCharges: batch.totalCharges,
         senderPhone: batch.senderPhone,
@@ -85,6 +86,7 @@ export class TenantService {
     return {
       batchId: batch.id,
       status: batch.status,
+      provider: batch.provider,
       totalAmount: batch.totalAmount,
       totalCharges: batch.totalCharges,
       senderPhone: batch.senderPhone,
@@ -97,6 +99,7 @@ export class TenantService {
         type: job.jobType,
         status: job.status,
         mtnRef: job.mtnRef,
+        recipientName: job.recipientName,
         failReason: job.failReason,
       })),
       createdAt: batch.createdAt,

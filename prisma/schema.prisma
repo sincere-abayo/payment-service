@@ -40,15 +40,23 @@ model TenantApp {
   id          String              @id @default(uuid())
   name        String
   email       String              @unique
-  webhookUrl  String?
-  status      TenantStatus        @default(PENDING)
+  webhookUrl     String?
+  webhookSecret  String?
+  status         TenantStatus        @default(PENDING)
+  itecAccountType ItecAccountType   @default(NORMAL)
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
   apiKeys     ApiKey[]
   batches     DisbursementBatch[]
+  collections Collection[]
   webhookLogs WebhookLog[]
 
   @@map("tenant_apps")
+}
+
+enum ItecAccountType {
+  NORMAL
+  MERCHANT
 }
 
 enum TenantStatus {
@@ -56,6 +64,75 @@ enum TenantStatus {
   ACTIVE
   SUSPENDED
   REVOKED
+}
+
+enum PaymentProvider {
+  ITEC
+  MTN
+  XENTRY
+}
+
+model ProviderFeeConfig {
+  id        String          @id @default(uuid())
+  provider  PaymentProvider @unique
+  fixedFee  Int             @default(0)
+  enabled   Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@map("provider_fee_configs")
+}
+
+/// Global ITEC Pay settings per account type, managed from the admin dashboard.
+/// apiUrl includes the API version path (e.g. https://pay.itecpay.rw/api2).
+model ItecPayConfig {
+  id          String          @id @default(uuid())
+  accountType ItecAccountType @unique
+  apiUrl      String
+  apiKey      String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("itec_pay_configs")
+}
+
+/// Which provider handles each flow (was PAYMENT_PROVIDER_* env vars) — singleton row.
+model PaymentRoutingConfig {
+  id                   String           @id @default("main")
+  defaultProvider      PaymentProvider  @default(ITEC)
+  collectionProvider   PaymentProvider?
+  disbursementProvider PaymentProvider?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@map("payment_routing_configs")
+}
+
+/// Xentry (XentriPay) settings — singleton row, admin-configurable.
+model XentryPayConfig {
+  id            String   @id @default("main")
+  baseUrl       String   @default("https://merchant.test.xentripay.com")
+  apiKey        String   @default("")
+  webhookSecret String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("xentry_pay_configs")
+}
+
+/// MTN MoMo settings (direct API) — singleton row, admin-configurable.
+model MtnPayConfig {
+  id              String   @id @default("main")
+  baseUrl         String   @default("")
+  subscriptionKey String   @default("")
+  apiUser         String   @default("")
+  apiKey          String   @default("")
+  environment     String   @default("sandbox")
+  callbackUrl     String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("mtn_pay_configs")
 }
 
 model ApiKey {
@@ -80,12 +157,16 @@ model DisbursementBatch {
   id             String            @id @default(uuid())
   tenantId       String
   idempotencyKey String?
+  provider       PaymentProvider   @default(ITEC)
   userPseudoId   String
   senderPhone    String
   totalAmount    Int
   totalCharges   Int
   chargeReceiver String
+  providerFee    Int               @default(0)
+  totalCharged   Int               @default(0)
   status         BatchStatus       @default(PENDING)
+  isWithdraw     Boolean           @default(false)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   tenant         TenantApp         @relation(fields: [tenantId], references: [id])
@@ -98,6 +179,7 @@ model DisbursementBatch {
   @@index([userPseudoId])
   @@index([senderPhone])
   @@index([status])
+  @@index([isWithdraw, createdAt])
   @@map("disbursement_batches")
 }
 
@@ -109,17 +191,21 @@ enum BatchStatus {
 }
 
 model DisbursementJob {
-  id         String            @id @default(uuid())
-  batchId    String
-  phone      String
-  amount     Int
-  jobType    JobType
-  status     JobStatus         @default(QUEUED)
-  mtnRef     String?
-  failReason String?
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  batch      DisbursementBatch @relation(fields: [batchId], references: [id])
+  id           String            @id @default(uuid())
+  batchId      String
+  phone        String
+  amount       Int
+  jobType      JobType
+  providerFee  Int               @default(0)
+  totalCharged Int               @default(0)
+  status       JobStatus         @default(QUEUED)
+  mtnRef       String?
+  /// Recipient account name as validated by the provider (Xentry validatedAccountName).
+  recipientName String?
+  failReason   String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  batch        DisbursementBatch @relation(fields: [batchId], references: [id])
 
   @@index([batchId])
   @@index([status])
@@ -138,21 +224,54 @@ enum JobStatus {
   FAILED
 }
 
+model Collection {
+  id             String           @id @default(uuid())
+  tenantId       String
+  idempotencyKey String?
+  provider       PaymentProvider  @default(ITEC)
+  userPseudoId   String
+  phone          String
+  amount         Int
+  status         CollectionStatus @default(QUEUED)
+  mtnRef         String?
+  failReason     String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  tenant         TenantApp        @relation(fields: [tenantId], references: [id])
+  webhookLog     WebhookLog?
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId])
+  @@index([userPseudoId])
+  @@index([phone])
+  @@index([status])
+  @@map("collections")
+}
+
+enum CollectionStatus {
+  QUEUED
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
 model WebhookLog {
-  id            String            @id @default(uuid())
-  batchId       String
+  id            String             @id @default(uuid())
+  batchId       String?
+  collectionId  String?            @unique
   tenantId      String
   url           String
   payload       Json
-  status        WebhookStatus     @default(PENDING)
-  attempts      Int               @default(0)
+  status        WebhookStatus      @default(PENDING)
+  attempts      Int                @default(0)
   lastAttemptAt DateTime?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  batch         DisbursementBatch @relation(fields: [batchId], references: [id])
-  tenant        TenantApp         @relation(fields: [tenantId], references: [id])
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  batch         DisbursementBatch? @relation(fields: [batchId], references: [id])
+  collection    Collection?        @relation(fields: [collectionId], references: [id])
+  tenant        TenantApp          @relation(fields: [tenantId], references: [id])
 
-  @@index([batchId])
+  @@unique([batchId])
   @@index([tenantId])
   @@index([status])
   @@map("webhook_logs")
@@ -163,4 +282,21 @@ enum WebhookStatus {
   SUCCESS
   FAILED
   RETRYING
+}
+
+/// Inbound provider webhook deliveries (XentriPay -> us), deduped by idempotency key.
+/// This model exists only in this deployment (not in the arvash schema).
+model ProviderWebhookEvent {
+  id                String    @id @default(uuid())
+  provider          String
+  idempotencyKey    String
+  eventType         String?
+  payload           Json
+  signatureVerified Boolean   @default(false)
+  processedAt       DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@unique([provider, idempotencyKey])
+  @@index([createdAt])
+  @@map("provider_webhook_events")
 }

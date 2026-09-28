@@ -6,10 +6,18 @@ import {
 import { createHash, randomBytes } from 'crypto';
 import { Prisma, TenantStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProviderRoutingService, ProviderRoutingCode } from '../payment/provider-routing.service';
+import { MtnPayConfigService, MtnSettingsInput, MtnSettingsView } from '../payment/mtn/mtn-config.service';
+import { XentryPayConfigService, XentrySettingsView } from '../payment/xentry-pay/xentry-pay-config.service';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly providerRoutingService: ProviderRoutingService,
+    private readonly xentryPayConfigService: XentryPayConfigService,
+    private readonly mtnPayConfigService: MtnPayConfigService,
+  ) {}
 
   async registerTenant(
     adminId: string,
@@ -660,6 +668,7 @@ export class AdminService {
       items: items.map((batch) => ({
         batchId: batch.id,
         status: batch.status,
+        provider: batch.provider,
         totalAmount: batch.totalAmount,
         totalCharges: batch.totalCharges,
         senderPhone: batch.senderPhone,
@@ -756,6 +765,152 @@ export class AdminService {
 
     const value = (row._sum as Record<string, unknown>)[field];
     return typeof value === 'number' ? value : 0;
+  }
+
+  async getProviderRouting(adminId: string) {
+    const routing = await this.providerRoutingService.get();
+
+    await this.logAction(adminId, {
+      action: 'LISTED_PROVIDER_ROUTING',
+      targetType: 'PaymentRoutingConfig',
+      targetId: 'main',
+      note: `default=${routing.default ?? '(unset)'}, collection=${routing.collection ?? '(default)'}, disbursement=${routing.disbursement ?? '(default)'}`,
+    });
+
+    return routing;
+  }
+
+  async setProviderRouting(
+    adminId: string,
+    payload: { default?: unknown; collection?: unknown; disbursement?: unknown },
+  ) {
+    const codes = ProviderRoutingService.codes;
+
+    const normalize = (
+      value: unknown,
+      field: string,
+      required: boolean,
+    ): ProviderRoutingCode | null | undefined => {
+      if (value === undefined && !required) {
+        return undefined;
+      }
+
+      if (value === null && !required) {
+        return null;
+      }
+
+      if (typeof value !== 'string' || !codes.includes(value as ProviderRoutingCode)) {
+        throw new BadRequestException(
+          required
+            ? `${field} provider is required and must be one of: ${codes.join(', ')}`
+            : `${field} provider must be one of: ${codes.join(', ')}`,
+        );
+      }
+
+      return value as ProviderRoutingCode;
+    };
+
+    const defaultCode = normalize(payload.default, 'default', true) as ProviderRoutingCode;
+    const collection = normalize(payload.collection, 'collection', false);
+    const disbursement = normalize(payload.disbursement, 'disbursement', false);
+
+    const result = await this.providerRoutingService.upsert({
+      default: defaultCode,
+      collection: collection ?? null,
+      disbursement: disbursement ?? null,
+    });
+
+    await this.logAction(adminId, {
+      action: 'SET_PROVIDER_ROUTING',
+      targetType: 'PaymentRoutingConfig',
+      targetId: 'main',
+      note: `default=${result.default ?? '(unset)'}, collection=${result.collection ?? '(default)'}, disbursement=${result.disbursement ?? '(default)'}`,
+    });
+
+    return result;
+  }
+
+  async getXentryPayConfig(adminId: string): Promise<XentrySettingsView> {
+    const config = await this.xentryPayConfigService.get();
+
+    await this.logAction(adminId, {
+      action: 'LISTED_XENTRY_PAY_CONFIG',
+      targetType: 'XentryPayConfig',
+      targetId: 'main',
+      note: `baseUrl=${config.baseUrl}`,
+    });
+
+    return config;
+  }
+
+  async setXentryPayConfig(
+    adminId: string,
+    payload: { baseUrl?: unknown; apiKey?: unknown; webhookSecret?: unknown },
+  ): Promise<XentrySettingsView> {
+    const optionalString = (value: unknown, field: string): string | undefined => {
+      if (value === undefined) {
+        return undefined;
+      }
+
+      if (typeof value !== 'string') {
+        throw new BadRequestException(`${field} must be a string`);
+      }
+
+      return value;
+    };
+
+    const result = await this.xentryPayConfigService.upsert({
+      baseUrl: optionalString(payload.baseUrl, 'baseUrl'),
+      apiKey: optionalString(payload.apiKey, 'apiKey'),
+      webhookSecret: optionalString(payload.webhookSecret, 'webhookSecret'),
+    });
+
+    const mask = (value: string) => (value ? `***${value.slice(-4)}` : '(unset)');
+    await this.logAction(adminId, {
+      action: 'SET_XENTRY_PAY_CONFIG',
+      targetType: 'XentryPayConfig',
+      targetId: 'main',
+      note: `baseUrl=${result.baseUrl}, apiKey=${mask(result.apiKey)}, webhookSecret=${mask(result.webhookSecret)}`,
+    });
+
+    return result;
+  }
+
+  async getMtnPayConfig(adminId: string): Promise<MtnSettingsView> {
+    const config = await this.mtnPayConfigService.get();
+
+    await this.logAction(adminId, {
+      action: 'LISTED_MTN_PAY_CONFIG',
+      targetType: 'MtnPayConfig',
+      targetId: 'main',
+      note: `baseUrl=${config.baseUrl || '(unset)'}, environment=${config.environment}`,
+    });
+
+    return config;
+  }
+
+  async setMtnPayConfig(adminId: string, payload: MtnSettingsInput): Promise<MtnSettingsView> {
+    if (payload.environment && !['sandbox', 'production'].includes(payload.environment)) {
+      throw new BadRequestException('environment must be one of: sandbox, production');
+    }
+
+    const result = await this.mtnPayConfigService.upsert(payload);
+
+    const mask = (value: string) => (value ? `***${value.slice(-4)}` : '(unset)');
+    await this.logAction(adminId, {
+      action: 'SET_MTN_PAY_CONFIG',
+      targetType: 'MtnPayConfig',
+      targetId: 'main',
+      note: [
+        `baseUrl=${result.baseUrl || '(unset)'}`,
+        `environment=${result.environment}`,
+        `subscriptionKey=${mask(result.subscriptionKey)}`,
+        `apiUser=${mask(result.apiUser)}`,
+        `apiKey=${mask(result.apiKey)}`,
+      ].join(', '),
+    });
+
+    return result;
   }
 
   private createRawApiKey(): string {

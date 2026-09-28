@@ -85,8 +85,9 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
     totalAmount: 35000,
     totalCharges: 500,
     chargeReceiver: '0789000000',
+    chargeReceiverName: 'Jean Bizimana',
     recipients: [
-      { phone: '0781111111', amount: 2000 },
+      { phone: '0781111111', amount: 2000, name: 'Alice Uwase', telecomProviderId: '63510' },
       { phone: '0782222222', amount: 3000 },
       { phone: '0783333333', amount: 10000 },
       { phone: '0784444444', amount: 15000 },
@@ -110,6 +111,27 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
     tenantId: 'f61adb55-62ce-4221-8630-883c3a8bda4e',
     limit: 20,
     offset: 0,
+  },
+  ADM_GETRTE_3E5G: {},
+  ADM_SETRTE_5I7K: {
+    default: 'xentry',
+    collection: 'mtn',
+    disbursement: 'xentry',
+  },
+  ADM_GETXTR_7M9O: {},
+  ADM_SETXTR_1P3R: {
+    baseUrl: 'https://merchant.test.xentripay.com',
+    apiKey: 'xent_live_xxxxxxxxxxxxxxxxxxxx',
+    webhookSecret: 'whsec_xxxxxxxxxxxxxxxxxxxx',
+  },
+  ADM_GETMTN_5T7V: {},
+  ADM_SETMTN_9X1Z: {
+    baseUrl: 'https://sandbox.momodeveloper.mtn.com',
+    subscriptionKey: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    apiUser: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    apiKey: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    environment: 'sandbox',
+    callbackUrl: 'https://api.example.com/webhooks/providers/mtn',
   },
 };
 
@@ -299,12 +321,14 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
   DSB_INIT_3C4D: {
     batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
     status: 'PROCESSING',
+    provider: 'xentry',
     jobCount: 6,
     message: 'Batch accepted. 6 jobs queued (5 payouts + 1 charge).',
   },
   DSB_STATUS_4E5F: {
     batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
     status: 'COMPLETED',
+    provider: 'xentry',
     totalAmount: 35000,
     totalCharges: 500,
     senderPhone: '0788000000',
@@ -317,12 +341,13 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
         amount: 2000,
         type: 'PAYOUT',
         status: 'SUCCESS',
-        mtnRef: 'mock_job-1',
+        mtnRef: 'xtr_9f2a1c',
+        recipientName: 'Alice Uwase',
         failReason: null,
       },
     ],
     createdAt: '2026-04-03T00:00:00.000Z',
-    updatedAt: '2026-04-03T00:00:00.000Z',
+    updatedAt: '2026-04-03T00:00:20.000Z',
   },
   TNT_LSTBTCH_1A1B: {
     total: 1,
@@ -383,6 +408,42 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
         updatedAt: '2026-04-03T00:00:20.000Z',
       },
     ],
+  },
+  ADM_GETRTE_3E5G: {
+    default: 'xentry',
+    collection: 'mtn',
+    disbursement: 'xentry',
+  },
+  ADM_SETRTE_5I7K: {
+    default: 'xentry',
+    collection: 'mtn',
+    disbursement: 'xentry',
+  },
+  ADM_GETXTR_7M9O: {
+    baseUrl: 'https://merchant.test.xentripay.com',
+    apiKey: 'xent_live_xxxxxxxxxxxxxxxxxxxx',
+    webhookSecret: 'whsec_xxxxxxxxxxxxxxxxxxxx',
+  },
+  ADM_SETXTR_1P3R: {
+    baseUrl: 'https://merchant.test.xentripay.com',
+    apiKey: 'xent_live_xxxxxxxxxxxxxxxxxxxx',
+    webhookSecret: 'whsec_xxxxxxxxxxxxxxxxxxxx',
+  },
+  ADM_GETMTN_5T7V: {
+    baseUrl: 'https://sandbox.momodeveloper.mtn.com',
+    subscriptionKey: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    apiUser: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    apiKey: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    environment: 'sandbox',
+    callbackUrl: 'https://api.example.com/webhooks/providers/mtn',
+  },
+  ADM_SETMTN_9X1Z: {
+    baseUrl: 'https://sandbox.momodeveloper.mtn.com',
+    subscriptionKey: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    apiUser: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    apiKey: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    environment: 'sandbox',
+    callbackUrl: 'https://api.example.com/webhooks/providers/mtn',
   },
 };
 
@@ -481,6 +542,8 @@ function applyCommandExamplesToDocument(
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log'],
+    // Keep the exact request bytes so XentriPay webhook HMACs verify correctly.
+    rawBody: true,
   });
 
   const port = process.env.PORT ?? 3000;
@@ -492,7 +555,17 @@ async function bootstrap() {
     origin: '*',
     // origin: process.env.ALLOWED_ORIGINS?.split(',') ?? '*',
     methods: ['POST', 'GET', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-command'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-api-key',
+      'x-command',
+      'x-request-id',
+      'x-xentripay-key',
+      'x-xentripay-signature',
+      'x-xentripay-event',
+      'x-xentripay-idempotency-key',
+    ],
   });
 
   app.useGlobalPipes(

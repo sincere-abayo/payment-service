@@ -90,8 +90,8 @@ Command Handler (inside feature module)
           DisbursementProcessor (Worker)
               │
               ├── Pick job from queue
-              ├── Call MtnService.transfer(phone, amount)
-              ├── MTN responds via callback
+              ├── Call PaymentProviderService.transfer() → routed provider (mtn | xentry)
+              ├── Provider responds via webhook or status poll
               └── Update job status → trigger WebhookService
                         │
                         ▼
@@ -303,12 +303,7 @@ npm run start:dev
 | `REDIS_PASSWORD`       | yes      | Redis auth password                                                |
 | `JWT_SECRET`           | yes      | Min 32 chars, random string                                        |
 | `JWT_EXPIRES_IN`       | no       | Default `8h`                                                       |
-| `MTN_BASE_URL`         | yes      | MTN MoMo API base URL                                              |
-| `MTN_SUBSCRIPTION_KEY` | yes      | From MTN developer portal                                          |
-| `MTN_API_USER`         | yes      | MTN API user UUID                                                  |
-| `MTN_API_KEY`          | yes      | MTN API key                                                        |
-| `MTN_ENVIRONMENT`      | yes      | `sandbox` \| `production`                                          |
-| `MTN_CALLBACK_URL`     | yes      | Your public callback URL                                           |
+| _(provider settings)_  | no       | MTN/Xentry credentials are **not read from env** — configure them in the DB via `ADM_SETMTN_9X1Z`, `ADM_SETXTR_1P3R` and route them via `ADM_SETRTE_5I7K` |
 | `ADMIN_EMAIL`          | yes      | Initial admin email (seed)                                         |
 | `ADMIN_PASSWORD`       | yes      | Initial admin password (seed)                                      |
 | `ALLOWED_ORIGINS`      | no       | Comma-separated CORS origins                                       |
@@ -395,6 +390,7 @@ TenantApp ──────────── ApiKey
 | `totalAmount`    | Int                 | Sum of all recipient amounts (smallest unit)                     |
 | `totalCharges`   | Int                 | Flat fee for the whole batch                                     |
 | `chargeReceiver` | String              | Phone that receives charge amount (must differ from senderPhone) |
+| `chargeReceiverName` | String (optional) | Registered account name for chargeReceiver (Xentry validates MSISDN names) |
 | `status`         | Enum                | `PENDING \| PROCESSING \| COMPLETED \| PARTIALLY_FAILED`         |
 
 #### `DisbursementJob`
@@ -671,6 +667,57 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
 | `ADM_GENKEY_9Q0R`  | ADMIN | ✓   | ✓ (common header) | Generate API key for tenant       |
 | `ADM_REVKEY_1S2T`  | ADMIN | ✓   | ✓ (common header) | Revoke an API key                 |
 | `ADM_REGKEY_6E7F`  | ADMIN | ✓   | ✓ (common header) | Regenerate tenant API key         |
+| `ADM_GETRTE_3E5G`  | ADMIN | ✓   | ✓ (common header) | Get payment provider routing      |
+| `ADM_SETRTE_5I7K`  | ADMIN | ✓   | ✓ (common header) | Set payment provider routing      |
+| `ADM_GETXTR_7M9O`  | ADMIN | ✓   | ✓ (common header) | Get Xentry Pay settings           |
+| `ADM_SETXTR_1P3R`  | ADMIN | ✓   | ✓ (common header) | Set Xentry Pay settings           |
+| `ADM_GETMTN_5T7V`  | ADMIN | ✓   | ✓ (common header) | Get MTN MoMo direct API settings  |
+| `ADM_SETMTN_9X1Z`  | ADMIN | ✓   | ✓ (common header) | Set MTN MoMo direct API settings  |
+
+#### `ADM_SETRTE_5I7K` — provider routing
+
+Chooses which provider handles collections and disbursements (applies without restart).
+Supported codes in this deployment: `mtn`, `xentry`.
+
+```json
+// Request body
+{ "default": "xentry", "collection": "mtn", "disbursement": "xentry" }
+
+// Response
+{ "default": "xentry", "collection": "mtn", "disbursement": "xentry" }
+```
+
+> If the stored routing still holds the legacy `itec` value (shared database from the
+> arvash deployment), `DSB_INIT_3C4D` fails fast with a clear error until you run
+> `ADM_SETRTE_5I7K`.
+
+#### `ADM_SETXTR_1P3R` — Xentry (XentriPay) settings
+
+```json
+// Request body (all fields optional; omitted fields keep current values)
+{
+  "baseUrl": "https://merchant.test.xentripay.com",
+  "apiKey": "xent_live_xxxxxxxxxxxxxxxxxxxx",
+  "webhookSecret": "whsec_xxxxxxxxxxxxxxxxxxxx"
+}
+
+// Response — secrets are returned raw to admins; audit logs mask them
+{ "baseUrl": "https://merchant.test.xentripay.com", "apiKey": "...", "webhookSecret": "..." }
+```
+
+#### `ADM_SETMTN_9X1Z` — MTN MoMo direct settings
+
+```json
+// Request body (all fields optional; environment must be sandbox|production)
+{
+  "baseUrl": "https://sandbox.momodeveloper.mtn.com",
+  "subscriptionKey": "uuid",
+  "apiUser": "uuid",
+  "apiKey": "uuid",
+  "environment": "sandbox",
+  "callbackUrl": "https://api.example.com/webhooks/providers/mtn"
+}
+```
 
 #### `ADM_REGTNT_5I6J`
 
@@ -757,8 +804,9 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
   "totalAmount": 35000,
   "totalCharges": 500,
   "chargeReceiver": "0788000000",
+  "chargeReceiverName": "Jean Bizimana",
   "recipients": [
-    { "phone": "0781111111", "amount": 2000 },
+    { "phone": "0781111111", "amount": 2000, "name": "Alice Uwase", "telecomProviderId": "63510" },
     { "phone": "0782222222", "amount": 3000 },
     { "phone": "0783333333", "amount": 10000 },
     { "phone": "0784444444", "amount": 15000 },
@@ -774,11 +822,17 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
 // - sum(recipients[].amount) must equal totalAmount
 // - totalCharges > 0
 // - recipients[] min 1 item
+// - recipients[].name is optional (Xentry returns the provider-validated account name)
+// - recipients[].telecomProviderId is optional (Xentry telecom code, default 63510)
+// - chargeReceiverName is optional but required for Xentry: every MSISDN must send its
+//   registered account name (Xentry rejects with 400 "Correct Registered name is : ...")
+// - fails fast if the routed provider (ADM_SETRTE_5I7K) has no credentials configured
 
 // Response
 {
   "batchId": "uuid",
   "status": "PROCESSING",
+  "provider": "xentry",
   "jobCount": 6,
   "message": "Batch accepted. 6 jobs queued (5 payouts + 1 charge)."
 }
@@ -788,9 +842,14 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
 
 ## 10. Disbursement Flow
 
-> Status: live. Batch intake, queue processing, callback updates, and webhook delivery are implemented.
+> Status: live. Batch intake, queue processing, provider transfers, callback updates, and webhook delivery are implemented.
 
-> Note: Until full MTN API integration is completed, disbursement worker/callback paths use optimistic success by default for all jobs.
+> Provider behavior: each batch is pinned to the routed provider (`ADM_SETRTE_5I7K`).
+> A provider rejection fails the job immediately (no optimistic success). When the
+> provider accepts a payout as pending, the job stays `PROCESSING` until either the
+> XentriPay webhook (`POST /webhooks/providers/xentripay`, HMAC-verified over the raw
+> body) or the status-poll fallback (30s → 30min backoff) confirms the final status.
+> Jobs still unconfirmed after 24 hours are marked `FAILED` with an explicit reason.
 
 ### Step-by-step
 
@@ -811,17 +870,19 @@ No JWT needed for tenant flows — tenant apiKey identifies tenant while common 
 
 3. DisbursementProcessor (worker) picks job from queue
    └── Update job status → PROCESSING
-   └── Call MtnService.transfer({ phone, amount, externalId: job.id })
-  └── MTN service stub returns { referenceId } and marks SUCCESS by default
+   └── Call PaymentProviderService.transfer() — routed provider (ADM_SETRTE_5I7K)
+       ├── Provider rejected the transfer → job FAILED (failReason stored)
+       ├── Provider accepted as pending   → keep PROCESSING + schedule status poll
+       └── Provider returned terminal     → job SUCCESS immediately
 
-4. MTN MoMo sends callback to MTN_CALLBACK_URL
-   └── WebhookReceiver validates callback signature
-   └── Finds job by externalId (= job.id)
-  └── Updates job in optimistic-success mode and stores callback reference
+4. Final status arrives via either:
+   ├── XentriPay webhook POST /webhooks/providers/xentripay (HMAC over raw body, idempotent)
+   └── Status-poll fallback (30s → 30min backoff, 24h deadline → FAILED)
+   └── Updates job terminal status (stores provider-validated recipientName)
    └── Checks: are all 6 jobs in terminal state?
        ├── Yes → update batch status (COMPLETED or PARTIALLY_FAILED)
-       │         → trigger WebhookService.sendToBatch(batchId)
-       └── No  → wait for remaining callbacks
+       │         → trigger WebhookService.dispatchBatchWebhook(batchId)
+       └── No  → wait for remaining callbacks/polls
 ```
 
 ### Batch status transitions
@@ -922,7 +983,7 @@ import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 
 ### MTN callback endpoint
 
-MTN posts transaction results to `MTN_CALLBACK_URL`. This is a separate, public endpoint (not behind `x-command`) that receives raw MTN callbacks.
+MTN posts transaction results to the callback URL configured via `ADM_SETMTN_9X1Z` (`callbackUrl`). This is a separate, public endpoint (not behind `x-command`) that receives raw MTN callbacks.
 
 ```
 POST /mtn-callback
@@ -1015,7 +1076,7 @@ The tenant app must respond with HTTP `200` to acknowledge receipt. Any other st
    }
    → 202 Accepted (async)
 
-3. MTN sends callback to MTN_CALLBACK_URL when done
+3. MTN sends callback to the configured callbackUrl (ADM_SETMTN_9X1Z) when done
    (or poll GET /disbursement/v1_0/transfer/{referenceId} for status)
 ```
 
@@ -1024,7 +1085,7 @@ The tenant app must respond with HTTP `200` to acknowledge receipt. Any other st
 The MTN access token expires in ~1 hour. Cache it in Redis:
 
 ```typescript
-// MtnService caches token in Redis with TTL = expires_in - 60s buffer
+// The MTN provider caches token in Redis with TTL = expires_in - 60s buffer
 const cachedToken = await this.redis.get("mtn:access_token");
 if (cachedToken) return cachedToken;
 
@@ -1335,6 +1396,14 @@ MTN MoMo Disbursement Platform
   │   ├── ADM_GENKEY_9Q0R
   │   ├── ADM_REVKEY_1S2T
   │   └── ADM_REGKEY_6E7F
+  ├── Providers - Routing
+  │   ├── ADM_GETRTE_3E5G
+  │   └── ADM_SETRTE_5I7K
+  ├── Providers - Credentials
+  │   ├── ADM_GETXTR_7M9O
+  │   ├── ADM_SETXTR_1P3R
+  │   ├── ADM_GETMTN_5T7V
+  │   └── ADM_SETMTN_9X1Z
   ├── Disbursement
   │   ├── DSB_INIT_3C4D
   │   └── DSB_STATUS_4E5F
@@ -1342,6 +1411,25 @@ MTN MoMo Disbursement Platform
       ├── TNT_LSTBTCH_1A1B
       └── TNT_BTCHSTS_2C2D
 ```
+
+Regenerate after adding commands:
+
+```bash
+npm run docs:generate-postman -- --base-url=http://localhost:3000 \
+  --output=postman/Payment-Service-Postman_collection.json
+```
+
+### Automated smoke test (providers + XentriPay webhook)
+
+```bash
+# app must be running (see section 2)
+BASE_URL=http://127.0.0.1:3100 bash scripts/smoke-provider-test.sh
+```
+
+Covers: routing/credential commands, provider pinning on `DSB_INIT_3C4D`,
+pending → poll, signed webhook accept / duplicate / tampered / raw-byte
+mismatch, batch completion, and the explicit-FAILED (no optimistic success)
+path when Xentry rejects a transfer.
 
 ### Postman environment variables
 
@@ -1387,7 +1475,7 @@ if (res.data.preAuthToken) {
 12. TNT_BTCHSTS_2C2D      → fetch tenant batch/job status
 
 Next-phase flow:
-13. replace optimistic success with full MTN transfer integration
+13. wire full MTN transfer integration (OAuth + requestToPay/transfer) on top of the DB-backed MTN settings
 ```
 
 ---

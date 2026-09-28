@@ -6,13 +6,13 @@
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main.js",
     "docs:generate-postman": "node scripts/generate-postman-from-swagger.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "prisma:seed:js": "node prisma/seed.js",
+    "prisma:seed:js": "node dist/prisma/seed.js",
     "db:setup": "npm run prisma:generate && npm run prisma:migrate:dev -- --name init && npm run prisma:seed"
   },
   "dependencies": {
