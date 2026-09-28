@@ -548,6 +548,10 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3000;
 
+  // Behind nginx: trust X-Forwarded-For from the local reverse proxy so logs
+  // and IP-based middleware see the real client, not 127.0.0.1.
+  (app.getHttpAdapter().getInstance() as import('express').Express).set('trust proxy', 1);
+
   app.use(helmet());
   app.use(compression());
 
