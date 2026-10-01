@@ -51,8 +51,10 @@ export class DisbursementService {
 
     const idempotencyKey = this.requireString(payload.idempotencyKey, 'idempotencyKey');
     const userPseudoId = this.requireString(payload.userPseudoId, 'userPseudoId');
-    const senderPhone = this.requireString(payload.senderPhone, 'senderPhone');
-    const chargeReceiver = this.requireString(payload.chargeReceiver, 'chargeReceiver');
+    const senderPhone = this.normalizePhone(this.requireString(payload.senderPhone, 'senderPhone'));
+    const chargeReceiver = this.normalizePhone(
+      this.requireString(payload.chargeReceiver, 'chargeReceiver'),
+    );
 
     if (senderPhone === chargeReceiver) {
       throw new BadRequestException('senderPhone and chargeReceiver must be different');
@@ -249,6 +251,7 @@ export class DisbursementService {
         status: job.status,
         mtnRef: job.mtnRef,
         recipientName: job.recipientName,
+        validatedRecipientName: job.validatedRecipientName,
         failReason: job.failReason,
       })),
       createdAt: batch.createdAt,
@@ -261,6 +264,27 @@ export class DisbursementService {
       throw new BadRequestException(`${fieldName} is required`);
     }
 
+    return value.trim();
+  }
+
+  /**
+   * Normalize Rwandan MSISDNs to local 0-prefixed format before persisting and
+   * sending to the provider: '+250785988465' / '250785988465' / '0785988465'
+   * all become '0785988465'. Any other format is passed through unchanged.
+   */
+  private normalizePhone(value: string): string {
+    const compact = value.trim().replace(/[\s()-.]/g, '');
+    const plusLocal = /^\+250(\d{9})$/.exec(compact);
+    if (plusLocal) {
+      return `0${plusLocal[1]}`;
+    }
+    const bareLocal = /^250(\d{9})$/.exec(compact);
+    if (bareLocal) {
+      return `0${bareLocal[1]}`;
+    }
+    if (/^0\d{9}$/.test(compact)) {
+      return compact;
+    }
     return value.trim();
   }
 
@@ -308,7 +332,7 @@ export class DisbursementService {
       }
 
       return {
-        phone: (recipient as RecipientInput).phone.trim(),
+        phone: this.normalizePhone((recipient as RecipientInput).phone),
         amount: (recipient as RecipientInput).amount,
         ...(name?.trim() ? { name: name.trim() } : {}),
         ...(telecomProviderId?.trim() ? { telecomProviderId: telecomProviderId.trim() } : {}),

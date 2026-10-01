@@ -379,6 +379,8 @@ export class WebhookService {
         type: job.jobType,
         status: job.status,
         mtnRef: job.mtnRef,
+        recipientName: job.recipientName,
+        validatedRecipientName: job.validatedRecipientName,
         failReason: job.failReason,
       })),
       timestamp: new Date().toISOString(),

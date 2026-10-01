@@ -409,3 +409,4 @@ For issues and questions, refer to:
 
 - `PAYMENT_SERVICE_DOCS.md` - Detailed API documentation
 - `TENANT_APPLICATION_GUIDELINE.md` - Tenant integration guide
+- `TENANT_DISBURSEMENT_GUIDE.md` - Xentry disbursement integration guide for tenant backends

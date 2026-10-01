@@ -100,6 +100,7 @@ export class TenantService {
         status: job.status,
         mtnRef: job.mtnRef,
         recipientName: job.recipientName,
+        validatedRecipientName: job.validatedRecipientName,
         failReason: job.failReason,
       })),
       createdAt: batch.createdAt,

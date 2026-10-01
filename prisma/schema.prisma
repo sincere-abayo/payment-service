@@ -202,6 +202,9 @@ model DisbursementJob {
   mtnRef       String?
   /// Recipient account name as validated by the provider (Xentry validatedAccountName).
   recipientName String?
+  /// Registered account name parsed from a provider name-mismatch rejection
+  /// (Xentry "Correct Registered name is : ..."); tenants use it to correct beneficiary data.
+  validatedRecipientName String?
   failReason   String?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt

@@ -72,6 +72,7 @@ export class DisbursementProcessor extends WorkerHost {
       data: {
         status: JobStatus.PROCESSING,
         failReason: null,
+        validatedRecipientName: null,
       },
     });
 
@@ -117,6 +118,7 @@ export class DisbursementProcessor extends WorkerHost {
         data: {
           status: JobStatus.FAILED,
           failReason: reason,
+          validatedRecipientName: this.extractValidatedRecipientName(reason),
         },
       });
 
@@ -177,16 +179,20 @@ export class DisbursementProcessor extends WorkerHost {
 
         if (mapped === JobStatus.SUCCESS || mapped === JobStatus.FAILED) {
           const validatedName = status.validatedAccountName?.trim();
+          const failureReason =
+            mapped === JobStatus.FAILED
+              ? `XentriPay: payout ${status.status.toLowerCase()}${status.statusMessage ? ` (${status.statusMessage})` : ''}`
+              : null;
 
           await this.prisma.disbursementJob.update({
             where: { id: job.id },
             data: {
               status: mapped,
               mtnRef: status.internalRef || job.mtnRef,
-              failReason:
-                mapped === JobStatus.FAILED
-                  ? `XentriPay: payout ${status.status.toLowerCase()}${status.statusMessage ? ` (${status.statusMessage})` : ''}`
-                  : null,
+              failReason: failureReason,
+              ...(failureReason
+                ? { validatedRecipientName: this.extractValidatedRecipientName(failureReason) }
+                : {}),
               ...(validatedName ? { recipientName: validatedName } : {}),
             },
           });
@@ -202,6 +208,17 @@ export class DisbursementProcessor extends WorkerHost {
     }
 
     await this.scheduleStatusPoll(payload, attempt + 1, deadline);
+  }
+
+  /**
+   * Parses Xentry's name-mismatch rejection ("Correct Registered name is : X")
+   * out of a failure message so tenants receive the expected name structured
+   * instead of scraping failReason. Returns null when the message is unrelated.
+   */
+  private extractValidatedRecipientName(reason: string): string | null {
+    const match = /Correct Registered name is\s*:\s*([^)]+)/i.exec(reason);
+    const name = match?.[1]?.trim();
+    return name ? name : null;
   }
 
   private async scheduleStatusPoll(
