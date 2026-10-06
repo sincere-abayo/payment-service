@@ -59,7 +59,7 @@ export type XentryPayoutResponse = {
   currency: string;
   amount: number;
   txnCharge: number;
-  status: 'PENDING' | 'COMPLETED' | 'SUCCESSFUL' | 'FAILED' | 'REVERSED';
+  status: 'PENDING' | 'COMPLETED' | 'SUCCESSFUL' | 'FAILED' | 'REVERSED' | 'REJECTED';
   statusMessage: string;
   internalRef: string;
   remoteIp: string;
@@ -71,6 +71,19 @@ export type XentryPayoutResponse = {
 };
 
 export type XentryPayoutStatusResponse = XentryPayoutResponse;
+
+type XentryPayoutStatusData = Partial<XentryPayoutResponse> & {
+  status: XentryPayoutResponse['status'];
+  reference_number?: string;
+  reason?: string;
+  message?: string;
+};
+
+type XentryPayoutStatusEnvelope = {
+  timestamp?: string;
+  message?: string;
+  data: XentryPayoutStatusData;
+};
 
 export type XentryCheckoutSessionRequest = {
   amount: number;
@@ -187,10 +200,20 @@ export class XentryPayHelper {
   }
 
   async checkPayoutStatus(customerReference: string): Promise<XentryPayoutStatusResponse> {
-    return this.request<XentryPayoutStatusResponse>(
+    const response = await this.request<XentryPayoutStatusResponse | XentryPayoutStatusEnvelope>(
       'GET',
       `/api/payment-requests/check-status?customerRef=${encodeURIComponent(customerReference)}`,
     );
+
+    // XentriPay's docs show check-status in two shapes: the full payout record
+    // and { message, data: { status, ... } }. Normalize both so COMPLETED is
+    // not accidentally treated as an unknown/non-terminal status.
+    const status = 'data' in response ? response.data : response;
+    if (!status?.status) {
+      throw new Error('XentryPay payout status response is missing status');
+    }
+
+    return status as XentryPayoutStatusResponse;
   }
 
   async createCheckoutSession(request: XentryCheckoutSessionRequest): Promise<XentryCheckoutSessionResponse> {
@@ -219,7 +242,11 @@ export class XentryPayHelper {
   }
 
   assertPayoutSuccess(response: XentryPayoutResponse, operation: string): string {
-    if (response.status === 'FAILED' || response.status === 'REVERSED') {
+    if (
+      response.status === 'FAILED' ||
+      response.status === 'REVERSED' ||
+      response.status === 'REJECTED'
+    ) {
       throw new Error(`XentryPay ${operation} failed: ${response.statusMessage}`);
     }
 

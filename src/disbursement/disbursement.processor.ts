@@ -67,14 +67,20 @@ export class DisbursementProcessor extends WorkerHost {
   }
 
   private async handleTransfer(payload: DisbursementQueueJob): Promise<void> {
-    await this.prisma.disbursementJob.update({
-      where: { id: payload.jobId },
+    const claimed = await this.prisma.disbursementJob.updateMany({
+      where: { id: payload.jobId, status: JobStatus.QUEUED },
       data: {
         status: JobStatus.PROCESSING,
         failReason: null,
         validatedRecipientName: null,
       },
     });
+
+    // BullMQ delivery is at-least-once. A retry/duplicate must not initiate a
+    // second payout or regress a job already resolved by a provider callback.
+    if (claimed.count === 0) {
+      return;
+    }
 
     try {
       const transfer = await this.paymentProviders.transfer({
@@ -88,8 +94,11 @@ export class DisbursementProcessor extends WorkerHost {
 
       const terminalStatus = transfer.pending ? JobStatus.PROCESSING : JobStatus.SUCCESS;
 
-      await this.prisma.disbursementJob.update({
-        where: { id: payload.jobId },
+      await this.prisma.disbursementJob.updateMany({
+        where: {
+          id: payload.jobId,
+          status: { in: [JobStatus.QUEUED, JobStatus.PROCESSING] },
+        },
         data: {
           status: terminalStatus,
           mtnRef: transfer.referenceId,
@@ -113,8 +122,11 @@ export class DisbursementProcessor extends WorkerHost {
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unknown transfer error';
 
-      await this.prisma.disbursementJob.update({
-        where: { id: payload.jobId },
+      await this.prisma.disbursementJob.updateMany({
+        where: {
+          id: payload.jobId,
+          status: { in: [JobStatus.QUEUED, JobStatus.PROCESSING] },
+        },
         data: {
           status: JobStatus.FAILED,
           failReason: reason,
@@ -154,8 +166,11 @@ export class DisbursementProcessor extends WorkerHost {
     const deadline = job.createdAt.getTime() + STATUS_POLL_DEADLINE_MS;
 
     if (Date.now() >= deadline) {
-      await this.prisma.disbursementJob.update({
-        where: { id: job.id },
+      await this.prisma.disbursementJob.updateMany({
+        where: {
+          id: job.id,
+          status: { in: [JobStatus.QUEUED, JobStatus.PROCESSING] },
+        },
         data: {
           status: JobStatus.FAILED,
           failReason: `Provider status not confirmed within 24 hours (providerRef: ${job.mtnRef ?? 'none'})`,
@@ -172,26 +187,35 @@ export class DisbursementProcessor extends WorkerHost {
 
     const isXentry = job.batch.provider === PrismaPaymentProvider.XENTRY;
 
-    if (isXentry && job.mtnRef) {
+    if (isXentry) {
       try {
-        const status = await this.xentryHelper.checkPayoutStatus(job.mtnRef);
+        // XentriPay's check-status endpoint expects the customerReference sent
+        // at initiation. That value is our job ID, not XentriPay's internalRef
+        // stored in mtnRef.
+        const status = await this.xentryHelper.checkPayoutStatus(job.id);
         const mapped = this.mapProviderStatus(status.status);
 
         if (mapped === JobStatus.SUCCESS || mapped === JobStatus.FAILED) {
           const validatedName = status.validatedAccountName?.trim();
           const failureReason =
             mapped === JobStatus.FAILED
-              ? `XentriPay: payout ${status.status.toLowerCase()}${status.statusMessage ? ` (${status.statusMessage})` : ''}`
+              ? this.buildXentryFailureReason(status)
               : null;
 
-          await this.prisma.disbursementJob.update({
-            where: { id: job.id },
+          await this.prisma.disbursementJob.updateMany({
+            where: {
+              id: job.id,
+              status: { in: [JobStatus.QUEUED, JobStatus.PROCESSING] },
+            },
             data: {
               status: mapped,
               mtnRef: status.internalRef || job.mtnRef,
               failReason: failureReason,
               ...(failureReason
-                ? { validatedRecipientName: this.extractValidatedRecipientName(failureReason) }
+                ? {
+                    validatedRecipientName:
+                      validatedName || this.extractValidatedRecipientName(failureReason),
+                  }
                 : {}),
               ...(validatedName ? { recipientName: validatedName } : {}),
             },
@@ -219,6 +243,16 @@ export class DisbursementProcessor extends WorkerHost {
     const match = /Correct Registered name is\s*:\s*([^)]+)/i.exec(reason);
     const name = match?.[1]?.trim();
     return name ? name : null;
+  }
+
+  private buildXentryFailureReason(status: {
+    status: string;
+    statusMessage?: string;
+    reason?: string;
+    message?: string;
+  }): string {
+    const providerReason = status.statusMessage || status.reason || status.message;
+    return `XentriPay: payout ${status.status.toLowerCase()}${providerReason ? ` (${providerReason})` : ''}`;
   }
 
   private async scheduleStatusPoll(
@@ -255,6 +289,7 @@ export class DisbursementProcessor extends WorkerHost {
         return JobStatus.SUCCESS;
       case 'FAILED':
       case 'REVERSED':
+      case 'REJECTED':
         return JobStatus.FAILED;
       case 'PROCESSING':
         return JobStatus.PROCESSING;

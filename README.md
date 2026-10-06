@@ -160,8 +160,7 @@ docker-compose restart app
 docker-compose up -d --build app
 
 # Execute commands in container
-docker-compose exec app npm run prisma:migrate:deploy
-
+ 
 # View application logs
 docker-compose logs -f app
 
@@ -259,7 +258,7 @@ Access via: `http://109.123.245.58:<NODEPORT>`
 | `REDIS_PASSWORD`       | Redis password                       | Required      |
 | `JWT_SECRET`           | JWT signing secret                   | Required      |
 | `JWT_EXPIRES_IN`       | JWT expiration time                  | `8h`          |
-| _(provider settings)_  | MTN/Xentry credentials & routing   | DB (see below) |
+| _(provider settings)_  | MTN/Xentry credentials & routing   | DB (see below)  |
 | `RUN_SEED`             | Run database seed                    | `false`       |
 | `ADMIN_EMAIL`          | Admin email for seeding              | Required      |
 | `ADMIN_PASSWORD`       | Admin password for seeding           | Required      |

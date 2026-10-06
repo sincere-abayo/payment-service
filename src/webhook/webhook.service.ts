@@ -41,6 +41,8 @@ type NormalizedXentriPayEvent = {
   status: string;
   providerReference: string;
   providerEventId: number;
+  failureReason?: string;
+  validatedAccountName?: string;
   metadata: Record<string, unknown>;
 };
 
@@ -210,6 +212,10 @@ export class WebhookService {
         internalEvent = 'payout.failed';
         internalStatus = 'FAILED';
         break;
+      case 'PAYOUT_REJECTED':
+        internalEvent = 'payout.rejected';
+        internalStatus = 'REJECTED';
+        break;
       case 'PAYOUT_CREATED':
         internalEvent = 'payout.initiated';
         internalStatus = 'PENDING';
@@ -246,6 +252,10 @@ export class WebhookService {
         internalEvent = 'payment_request.failed';
         internalStatus = 'FAILED';
         break;
+      case 'PAYMENT_REQUEST_REJECTED':
+        internalEvent = 'payment_request.rejected';
+        internalStatus = 'REJECTED';
+        break;
       default:
         return null;
     }
@@ -259,6 +269,11 @@ export class WebhookService {
       status: internalStatus,
       providerReference: data.reference,
       providerEventId: data.id,
+      failureReason: this.readProviderText(data, ['statusMessage', 'reason', 'message']),
+      validatedAccountName: this.readProviderText(data, [
+        'validatedAccountName',
+        'validatedRecipientName',
+      ]),
       metadata: {
         xentriPayEvent: event,
         xentriPayEventType: eventType,
@@ -277,23 +292,38 @@ export class WebhookService {
       where: {
         OR: [{ mtnRef: providerReference }, { id: providerReference }],
       },
-      select: { id: true, batchId: true },
+      select: { id: true, batchId: true, status: true },
     });
   }
 
   private async updatePaymentStatus(
-    payment: { id: string; batchId: string },
+    payment: { id: string; batchId: string; status: JobStatus },
     event: NormalizedXentriPayEvent,
   ) {
+    // Provider callbacks may arrive out of order. Never allow a late pending
+    // or conflicting callback to regress an already terminal tenant-visible
+    // result.
+    if (payment.status === JobStatus.SUCCESS || payment.status === JobStatus.FAILED) {
+      return;
+    }
+
     const newStatus = this.mapEventToStatus(event.status);
 
-    await this.prisma.disbursementJob.update({
-      where: { id: payment.id },
+    await this.prisma.disbursementJob.updateMany({
+      where: {
+        id: payment.id,
+        status: { in: [JobStatus.QUEUED, JobStatus.PROCESSING] },
+      },
       data: {
         status: newStatus,
         mtnRef: event.providerReference,
         failReason:
-          newStatus === JobStatus.FAILED ? `XentriPay: ${event.status.toLowerCase()}` : null,
+          newStatus === JobStatus.FAILED
+            ? `XentriPay: ${event.status.toLowerCase()}${event.failureReason ? ` (${event.failureReason})` : ''}`
+            : null,
+        ...(newStatus === JobStatus.FAILED && event.validatedAccountName
+          ? { validatedRecipientName: event.validatedAccountName }
+          : {}),
       },
     });
 
@@ -306,6 +336,7 @@ export class WebhookService {
         return JobStatus.SUCCESS;
       case 'FAILED':
       case 'REVERSED':
+      case 'REJECTED':
         return JobStatus.FAILED;
       case 'PENDING':
       case 'PROCESSING':
@@ -313,6 +344,19 @@ export class WebhookService {
       default:
         return JobStatus.PROCESSING;
     }
+  }
+
+  private readProviderText(
+    data: XentriPayWebhookInput['data'],
+    fields: string[],
+  ): string | undefined {
+    for (const field of fields) {
+      const value = data[field];
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+    return undefined;
   }
 
   async dispatchBatchWebhook(batchId: string) {
