@@ -17,6 +17,7 @@ export type ProviderRoutingView = {
   default: ProviderRoutingViewCode | null;
   collection: ProviderRoutingViewCode | null;
   disbursement: ProviderRoutingViewCode | null;
+  withdraw: ProviderRoutingViewCode | null;
 };
 
 const WRITE_CODES: ProviderRoutingCode[] = ['mtn', 'xentry'];
@@ -38,20 +39,26 @@ export class ProviderRoutingService {
     const row = await this.prisma.paymentRoutingConfig.findUnique({ where: { id: 'main' } });
 
     if (!row) {
-      return { default: null, collection: null, disbursement: null };
+      return { default: null, collection: null, disbursement: null, withdraw: null };
     }
 
     return {
       default: toCode(row.defaultProvider),
       collection: toCode(row.collectionProvider),
       disbursement: toCode(row.disbursementProvider),
+      withdraw: toCode(row.withdrawProvider),
     };
   }
 
   /** Resolved provider for a flow: specific setting, else default. */
-  async resolve(kind: 'collection' | 'disbursement'): Promise<PaymentProviderName> {
+  async resolve(kind: 'collection' | 'disbursement' | 'withdraw'): Promise<PaymentProviderName> {
     const routing = await this.get();
-    const specific = kind === 'collection' ? routing.collection : routing.disbursement;
+    const specific =
+      kind === 'collection'
+        ? routing.collection
+        : kind === 'withdraw'
+          ? routing.withdraw
+          : routing.disbursement;
     const raw = (specific ?? routing.default ?? '').toLowerCase();
 
     if (!raw) {
@@ -79,6 +86,7 @@ export class ProviderRoutingService {
     default: ProviderRoutingCode;
     collection?: ProviderRoutingCode | null;
     disbursement?: ProviderRoutingCode | null;
+    withdraw?: ProviderRoutingCode | null;
   }): Promise<ProviderRoutingView> {
     const normalize = (code: ProviderRoutingCode | null | undefined, field: string) => {
       if (code == null) {
@@ -98,6 +106,7 @@ export class ProviderRoutingService {
       defaultProvider: normalize(payload.default, 'default') as PaymentProvider,
       collectionProvider: normalize(payload.collection, 'collection'),
       disbursementProvider: normalize(payload.disbursement, 'disbursement'),
+      withdrawProvider: normalize(payload.withdraw, 'withdraw'),
     };
 
     if (!data.defaultProvider) {
@@ -114,6 +123,7 @@ export class ProviderRoutingService {
       default: toCode(row.defaultProvider),
       collection: toCode(row.collectionProvider),
       disbursement: toCode(row.disbursementProvider),
+      withdraw: toCode(row.withdrawProvider),
     };
   }
 

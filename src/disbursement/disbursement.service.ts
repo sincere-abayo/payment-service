@@ -11,6 +11,7 @@ import {
   JOB_PROCESS_TRANSFER,
 } from '../queue/queue.module';
 import { PaymentProviderService } from '../payment/payment-provider.service';
+import { PaymentProviderName } from '../payment/payment-provider.types';
 import { toPrismaPaymentProvider } from '../payment/payment-provider.mapper';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -34,6 +35,18 @@ type InitiateDisbursementPayload = {
   /** Optional registered account name for the charge receiver (required by Xentry). */
   chargeReceiverName?: string;
   recipients?: RecipientInput[];
+};
+
+type InitiateWithdrawPayload = {
+  apiKey?: string;
+  idempotencyKey?: string;
+  userPseudoId?: string;
+  phone?: string;
+  amount?: number;
+  /** Xentry validates this against the recipient wallet during its OTP flow. */
+  name?: string;
+  /** Xentry telecom ID; defaults to MTN Mobile Money (63510). */
+  telecomProviderId?: string;
 };
 
 @Injectable()
@@ -104,6 +117,23 @@ export class DisbursementService {
       'disbursement',
       tenantId,
     );
+
+    // Xentry validates wallet account names during payout initiation. Reject a
+    // nameless request before it creates queued jobs that Xentry would reject.
+    if (providerName === PaymentProviderName.XENTRY) {
+      recipients.forEach((recipient, index) => {
+        if (!recipient.name) {
+          throw new BadRequestException(
+            `recipients[${index}].name is required for Xentry disbursements and must match the recipient's registered wallet account name`,
+          );
+        }
+      });
+      if (!chargeReceiverName) {
+        throw new BadRequestException(
+          "chargeReceiverName is required for Xentry disbursements and must match the charge receiver's registered wallet account name",
+        );
+      }
+    }
 
     const batch = await this.prisma.$transaction(async (tx) => {
       const createdBatch = await tx.disbursementBatch.create({
@@ -238,8 +268,11 @@ export class DisbursementService {
       batchId: batch.id,
       status: batch.status,
       provider: batch.provider,
+      isWithdraw: batch.isWithdraw,
       totalAmount: batch.totalAmount,
       totalCharges: batch.totalCharges,
+      providerFee: batch.providerFee,
+      totalChargedToTenant: batch.totalCharged,
       senderPhone: batch.senderPhone,
       chargeReceiver: batch.chargeReceiver,
       userPseudoId: batch.userPseudoId,
@@ -257,6 +290,135 @@ export class DisbursementService {
       createdAt: batch.createdAt,
       updatedAt: batch.updatedAt,
     };
+  }
+
+  /**
+   * WDR_INIT creates a single recipient payout without a charge job. It reuses
+   * the durable batch/job, polling, and tenant-callback pipeline used by
+   * disbursements while retaining an explicit withdrawal marker.
+   */
+  async initiateWithdraw(tenantId: string | undefined, payload: InitiateWithdrawPayload) {
+    if (!tenantId) {
+      throw new BadRequestException('Tenant context could not be resolved');
+    }
+
+    const idempotencyKey = this.requireString(payload.idempotencyKey, 'idempotencyKey');
+    const userPseudoId = this.requireString(payload.userPseudoId, 'userPseudoId');
+    const phone = this.normalizePhone(this.requireString(payload.phone, 'phone'));
+    const amount = this.requirePositiveInteger(payload.amount, 'amount');
+
+    const existing = await this.prisma.disbursementBatch.findUnique({
+      where: { tenantId_idempotencyKey: { tenantId, idempotencyKey } },
+      include: { jobs: { select: { id: true } } },
+    });
+    if (existing) {
+      if (!existing.isWithdraw) {
+        throw new BadRequestException('idempotencyKey is already used by a disbursement batch');
+      }
+      return {
+        batchId: existing.id,
+        status: existing.status,
+        provider: existing.provider,
+        jobId: existing.jobs[0]?.id,
+        requestedAmount: existing.totalAmount,
+        providerFee: existing.providerFee,
+        totalChargedToTenant: existing.totalCharged,
+        amountToRecipient: existing.totalAmount,
+        message: `Idempotent replay: returning existing withdraw ${existing.id}.`,
+      };
+    }
+
+    const providerName = await this.paymentProviders.assertProviderConfigured('withdraw', tenantId);
+    const name = payload.name === undefined ? undefined : this.requireString(payload.name, 'name');
+    if (providerName === PaymentProviderName.XENTRY && !name) {
+      throw new BadRequestException(
+        "name is required for Xentry withdrawals and must match the recipient's registered wallet account name",
+      );
+    }
+    const telecomProviderId = payload.telecomProviderId === undefined
+      ? undefined
+      : this.requireString(payload.telecomProviderId, 'telecomProviderId');
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const batch = await tx.disbursementBatch.create({
+        data: {
+          tenantId,
+          idempotencyKey,
+          provider: toPrismaPaymentProvider(providerName),
+          userPseudoId,
+          senderPhone: phone,
+          totalAmount: amount,
+          totalCharges: 0,
+          chargeReceiver: phone,
+          providerFee: 0,
+          totalCharged: amount,
+          status: BatchStatus.PROCESSING,
+          isWithdraw: true,
+        },
+      });
+      const job = await tx.disbursementJob.create({
+        data: {
+          batchId: batch.id,
+          phone,
+          amount,
+          jobType: JobType.PAYOUT,
+          providerFee: 0,
+          totalCharged: amount,
+          status: JobStatus.QUEUED,
+          ...(name ? { recipientName: name } : {}),
+        },
+      });
+      return { batch, job };
+    });
+
+    await this.disbursementQueue.add(
+      JOB_PROCESS_TRANSFER,
+      {
+        jobId: created.job.id,
+        batchId: created.batch.id,
+        tenantId,
+        userPseudoId,
+        phone,
+        amount,
+        jobType: JobType.PAYOUT,
+        isWithdraw: true,
+        ...(name ? { recipientName: name } : {}),
+        ...(telecomProviderId ? { telecomProviderId } : {}),
+      },
+      { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, removeOnComplete: { count: 100 }, removeOnFail: { count: 50 } },
+    );
+
+    return {
+      batchId: created.batch.id,
+      status: created.batch.status,
+      provider: providerName,
+      jobId: created.job.id,
+      phone,
+      amount,
+      recipientName: name,
+      requestedAmount: amount,
+      providerFee: 0,
+      totalChargedToTenant: amount,
+      amountToRecipient: amount,
+      message: providerName === PaymentProviderName.XENTRY
+        ? 'Withdrawal accepted. Xentry will keep it pending until the authorized business user confirms the OTP.'
+        : 'Withdrawal accepted and queued for processing.',
+    };
+  }
+
+  async getWithdrawStatus(tenantId: string | undefined, payload: { batchId?: string }) {
+    if (!tenantId) {
+      throw new BadRequestException('Tenant context could not be resolved');
+    }
+    const batchId = this.requireString(payload.batchId, 'batchId');
+    const batch = await this.prisma.disbursementBatch.findFirst({
+      where: { id: batchId, tenantId, isWithdraw: true },
+      select: { id: true },
+    });
+    if (!batch) {
+      throw new NotFoundException('Withdrawal not found');
+    }
+    return this.getBatchStatus(tenantId, { batchId });
   }
 
   private requireString(value: unknown, fieldName: string): string {

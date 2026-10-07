@@ -26,9 +26,58 @@ curl -X POST https://payments.transpip.com/ \
 
 The `TNT_BTCHSTS_2C2D` command is an alias with the same request and response.
 
+## Withdrawal / cashout
+
+Use `WDR_INIT_5E6F` to create one recipient `PAYOUT` without a charge job, and
+`WDR_STATUS_7G8H` to read it. Configure `withdraw: "xentry"` through
+`ADM_SETRTE_5I7K` before using the XentriPay route. The withdrawal-specific route
+does not change normal disbursement routing.
+
+```bash
+curl -X POST https://payments.transpip.com/ \
+  -H 'Content-Type: application/json' \
+  -H 'x-api-key: <SERVICE_KEY>' \
+  -H 'x-command: WDR_INIT_5E6F' \
+  -d '{
+    "apiKey": "<TENANT_KEY>",
+    "idempotencyKey": "withdrawal-20261007-001",
+    "userPseudoId": "user_abc123",
+    "phone": "0781111111",
+    "amount": 5000,
+    "name": "Alice Uwase",
+    "telecomProviderId": "63510"
+  }'
+```
+
+`name` is mandatory for XentriPay and must be the recipient's registered wallet
+name. `telecomProviderId` identifies the wallet network (`63510` for MTN Mobile
+Money and `63514` for Airtel Money). XentriPay accepts the payout as pending and
+requires the authorized business user to confirm its OTP; acceptance is not
+payment confirmation. Poll `WDR_STATUS_7G8H` using its returned `batchId` until
+the single job is `SUCCESS` or `FAILED`.
+
+### Withdrawal lifecycle is the same as disbursement
+
+Withdrawals use the exact same durable batch, job processing, XentriPay status
+polling, terminal-status rules, failure details, and tenant completion webhook
+as disbursements. Use the same polling and reconciliation behavior described in
+this guide. The only structural difference is the job count:
+
+| Flow | Jobs in the batch | Terminal batch result |
+|---|---|---|
+| Disbursement | One `PAYOUT` per recipient plus one `CHARGE` | `COMPLETED` or `PARTIALLY_FAILED` |
+| Withdrawal | One `PAYOUT`; no `CHARGE` | `COMPLETED` when paid, `PARTIALLY_FAILED` when the payout fails |
+
+For both flows, `PROCESSING` is not payment confirmation. Treat the recipient
+as paid only after its `PAYOUT` job reaches `SUCCESS`. A withdrawal failure has
+the same `failReason` and `validatedRecipientName` fields as a failed
+disbursement payout.
+
 ## 2. Status lifecycle
 
-Each batch contains one `PAYOUT` job per recipient and one `CHARGE` job.
+Each disbursement batch contains one `PAYOUT` job per recipient and one `CHARGE`
+job. A withdrawal batch contains one `PAYOUT` job and no `CHARGE` job; its
+statuses use this same table.
 
 | Object | Status | Meaning | Tenant action |
 |---|---|---|---|

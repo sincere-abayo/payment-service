@@ -10,7 +10,7 @@ import {
   PaymentProviderName,
 } from './payment-provider.types';
 
-export type MoneyMovementKind = 'collection' | 'disbursement';
+export type MoneyMovementKind = 'collection' | 'disbursement' | 'withdraw';
 
 @Injectable()
 export class PaymentProviderService {
@@ -41,8 +41,11 @@ export class PaymentProviderService {
     return this.providers.get(name)!.collect(input);
   }
 
-  async transfer(input: MoneyMovementInput): Promise<MoneyMovementResult> {
-    const provider = await this.resolve('disbursement', input);
+  async transfer(
+    input: MoneyMovementInput,
+    kind: Extract<MoneyMovementKind, 'disbursement' | 'withdraw'> = 'disbursement',
+  ): Promise<MoneyMovementResult> {
+    const provider = await this.resolve(kind, input);
     return provider.transfer(input);
   }
 

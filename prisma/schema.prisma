@@ -102,6 +102,7 @@ model PaymentRoutingConfig {
   defaultProvider      PaymentProvider  @default(ITEC)
   collectionProvider   PaymentProvider?
   disbursementProvider PaymentProvider?
+  withdrawProvider     PaymentProvider?
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
 

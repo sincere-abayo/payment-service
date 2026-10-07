@@ -52,11 +52,13 @@ export class XentryPayProvider implements PaymentProvider {
 
     const referenceId = this.xentry.assertPayoutSuccess(response, 'transfer');
 
+    const validatedAccountName = response.validatedAccountName?.trim();
+
     return {
       referenceId,
       provider: this.name,
       pending: true,
-      validatedAccountName: response.validatedAccountName?.trim() || undefined,
+      ...(validatedAccountName ? { validatedAccountName } : {}),
     };
   }
 

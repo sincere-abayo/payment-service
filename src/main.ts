@@ -99,6 +99,19 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
     apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
     batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
   },
+  WDR_INIT_5E6F: {
+    apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
+    idempotencyKey: 'withdraw_20261007_0001',
+    userPseudoId: 'user_abc123',
+    phone: '0781111111',
+    amount: 5000,
+    name: 'Alice Uwase',
+    telecomProviderId: '63510',
+  },
+  WDR_STATUS_7G8H: {
+    apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
+    batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
+  },
   COL_INIT_8A9B: {
     apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
     idempotencyKey: 'collection_20261007_0001',
@@ -131,6 +144,7 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
     default: 'xentry',
     collection: 'mtn',
     disbursement: 'xentry',
+    withdraw: 'xentry',
   },
   ADM_GETXTR_7M9O: {},
   ADM_SETXTR_1P3R: {
@@ -364,6 +378,34 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
     createdAt: '2026-04-03T00:00:00.000Z',
     updatedAt: '2026-04-03T00:00:20.000Z',
   },
+  WDR_INIT_5E6F: {
+    batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
+    status: 'PROCESSING',
+    provider: 'xentry',
+    jobId: 'a1c83712-4d3d-49a3-bd33-891957b7c3d5',
+    requestedAmount: 5000,
+    providerFee: 0,
+    totalChargedToTenant: 5000,
+    amountToRecipient: 5000,
+    message: 'Withdrawal accepted. Xentry will keep it pending until the authorized business user confirms the OTP.',
+  },
+  WDR_STATUS_7G8H: {
+    batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
+    status: 'PROCESSING',
+    provider: 'xentry',
+    isWithdraw: true,
+    totalAmount: 5000,
+    totalCharges: 0,
+    jobs: [
+      {
+        jobId: 'a1c83712-4d3d-49a3-bd33-891957b7c3d5',
+        phone: '0781111111',
+        amount: 5000,
+        type: 'PAYOUT',
+        status: 'PROCESSING',
+      },
+    ],
+  },
   COL_INIT_8A9B: {
     collectionId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
     status: 'QUEUED',
@@ -448,11 +490,13 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
     default: 'xentry',
     collection: 'mtn',
     disbursement: 'xentry',
+    withdraw: 'xentry',
   },
   ADM_SETRTE_5I7K: {
     default: 'xentry',
     collection: 'mtn',
     disbursement: 'xentry',
+    withdraw: 'xentry',
   },
   ADM_GETXTR_7M9O: {
     baseUrl: 'https://merchant.test.xentripay.com',

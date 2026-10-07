@@ -24,6 +24,8 @@ export type DisbursementQueueJob = {
   recipientName?: string;
   /** Provider-specific telecom code (e.g. 63510 for Xentry MTN MoMo payouts). */
   telecomProviderId?: string;
+  /** Withdrawal jobs resolve provider routing through the withdraw setting. */
+  isWithdraw?: boolean;
 };
 
 export type CheckPayoutStatusQueueJob = {
@@ -83,14 +85,17 @@ export class DisbursementProcessor extends WorkerHost {
     }
 
     try {
-      const transfer = await this.paymentProviders.transfer({
-        externalId: payload.jobId,
-        phone: payload.phone,
-        amount: payload.amount,
-        tenantId: payload.tenantId,
-        recipientName: payload.recipientName,
-        providerCode: payload.telecomProviderId,
-      });
+      const transfer = await this.paymentProviders.transfer(
+        {
+          externalId: payload.jobId,
+          phone: payload.phone,
+          amount: payload.amount,
+          tenantId: payload.tenantId,
+          recipientName: payload.recipientName,
+          providerCode: payload.telecomProviderId,
+        },
+        payload.isWithdraw ? 'withdraw' : 'disbursement',
+      );
 
       const terminalStatus = transfer.pending ? JobStatus.PROCESSING : JobStatus.SUCCESS;
 

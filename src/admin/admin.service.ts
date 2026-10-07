@@ -774,7 +774,7 @@ export class AdminService {
       action: 'LISTED_PROVIDER_ROUTING',
       targetType: 'PaymentRoutingConfig',
       targetId: 'main',
-      note: `default=${routing.default ?? '(unset)'}, collection=${routing.collection ?? '(default)'}, disbursement=${routing.disbursement ?? '(default)'}`,
+      note: `default=${routing.default ?? '(unset)'}, collection=${routing.collection ?? '(default)'}, disbursement=${routing.disbursement ?? '(default)'}, withdraw=${routing.withdraw ?? '(default)'}`,
     });
 
     return routing;
@@ -782,7 +782,7 @@ export class AdminService {
 
   async setProviderRouting(
     adminId: string,
-    payload: { default?: unknown; collection?: unknown; disbursement?: unknown },
+    payload: { default?: unknown; collection?: unknown; disbursement?: unknown; withdraw?: unknown },
   ) {
     const codes = ProviderRoutingService.codes;
 
@@ -813,18 +813,20 @@ export class AdminService {
     const defaultCode = normalize(payload.default, 'default', true) as ProviderRoutingCode;
     const collection = normalize(payload.collection, 'collection', false);
     const disbursement = normalize(payload.disbursement, 'disbursement', false);
+    const withdraw = normalize(payload.withdraw, 'withdraw', false);
 
     const result = await this.providerRoutingService.upsert({
       default: defaultCode,
       collection: collection ?? null,
       disbursement: disbursement ?? null,
+      withdraw: withdraw ?? null,
     });
 
     await this.logAction(adminId, {
       action: 'SET_PROVIDER_ROUTING',
       targetType: 'PaymentRoutingConfig',
       targetId: 'main',
-      note: `default=${result.default ?? '(unset)'}, collection=${result.collection ?? '(default)'}, disbursement=${result.disbursement ?? '(default)'}`,
+      note: `default=${result.default ?? '(unset)'}, collection=${result.collection ?? '(default)'}, disbursement=${result.disbursement ?? '(default)'}, withdraw=${result.withdraw ?? '(default)'}`,
     });
 
     return result;

@@ -39,5 +39,27 @@ export class DisbursementCommands implements OnModuleInit {
         return this.disbursementService.getBatchStatus(context.tenantId, payload);
       },
     });
+
+    this.registry.register({
+      code: 'WDR_INIT_5E6F',
+      description: 'Initiate a single mobile-money withdrawal/cashout.',
+      roles: [Role.TENANT],
+      requiresJwt: false,
+      requiresApiKey: true,
+      handler: async (payload, context) => {
+        return this.disbursementService.initiateWithdraw(context.tenantId, payload);
+      },
+    });
+
+    this.registry.register({
+      code: 'WDR_STATUS_7G8H',
+      description: 'Get withdrawal/cashout status by withdrawal batch ID.',
+      roles: [Role.TENANT],
+      requiresJwt: false,
+      requiresApiKey: true,
+      handler: async (payload, context) => {
+        return this.disbursementService.getWithdrawStatus(context.tenantId, payload);
+      },
+    });
   }
 }

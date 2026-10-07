@@ -9,6 +9,7 @@
     "start:prod": "node dist/src/main.js",
     "docs:generate-postman": "node scripts/generate-postman-from-swagger.js",
     "test:xentry-collection": "node scripts/test-xentry-collection.js",
+    "test:xentry-withdrawal": "node scripts/test-xentry-withdrawal.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
