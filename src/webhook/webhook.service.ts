@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
-import { BatchStatus, JobStatus, Prisma, WebhookStatus } from '@prisma/client';
+import {
+  BatchStatus,
+  CollectionStatus,
+  JobStatus,
+  PaymentProvider,
+  Prisma,
+  WebhookStatus,
+} from '@prisma/client';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -44,6 +51,7 @@ type NormalizedXentriPayEvent = {
   failureReason?: string;
   validatedAccountName?: string;
   metadata: Record<string, unknown>;
+  resource: 'collection' | 'disbursement' | 'other';
 };
 
 @Injectable()
@@ -103,6 +111,27 @@ export class WebhookService {
       this.logger.warn(`Unsupported XentriPay event type: ${event}`);
       await this.markWebhookProcessed(recordId);
       return { handled: false, reason: 'unsupported event type' };
+    }
+
+    if (normalized.resource === 'collection') {
+      const collection = await this.findCollectionByProviderReference(
+        normalized.providerReference,
+      );
+      if (!collection) {
+        this.logger.warn(
+          `Collection not found for provider reference ${normalized.providerReference}`,
+        );
+        return { handled: false, reason: 'collection not found' };
+      }
+
+      await this.updateCollectionStatus(collection, normalized);
+      await this.markWebhookProcessed(recordId);
+      return { handled: true, collectionId: collection.id };
+    }
+
+    if (normalized.resource === 'other') {
+      await this.markWebhookProcessed(recordId);
+      return { handled: false, reason: 'unsupported payment resource' };
     }
 
     const payment = await this.findPaymentByProviderReference(normalized.providerReference);
@@ -282,7 +311,62 @@ export class WebhookService {
         xentriPayTimestamp: timestamp,
         idempotencyKey,
       },
+      resource: event.startsWith('COLLECTION_')
+        ? 'collection'
+        : event.startsWith('PAYOUT_') || event.startsWith('PAYMENT_REQUEST_')
+          ? 'disbursement'
+          : 'other',
     };
+  }
+
+  private async findCollectionByProviderReference(providerReference: string) {
+    return this.prisma.collection.findFirst({
+      where: {
+        provider: PaymentProvider.XENTRY,
+        OR: [{ mtnRef: providerReference }, { id: providerReference }],
+      },
+      select: { id: true, status: true },
+    });
+  }
+
+  private async updateCollectionStatus(
+    collection: { id: string; status: CollectionStatus },
+    event: NormalizedXentriPayEvent,
+  ) {
+    if (
+      collection.status === CollectionStatus.SUCCESS ||
+      collection.status === CollectionStatus.FAILED
+    ) {
+      return;
+    }
+
+    const status = this.mapCollectionEventStatus(event.status);
+    await this.prisma.collection.updateMany({
+      where: {
+        id: collection.id,
+        status: { in: [CollectionStatus.QUEUED, CollectionStatus.PROCESSING] },
+      },
+      data: {
+        status,
+        mtnRef: event.providerReference,
+        failReason:
+          status === CollectionStatus.FAILED
+            ? `XentriPay: collection failed${event.failureReason ? ` (${event.failureReason})` : ''}`
+            : null,
+      },
+    });
+
+    await this.dispatchCollectionWebhook(collection.id);
+  }
+
+  private mapCollectionEventStatus(status: string): CollectionStatus {
+    if (status === 'SUCCESSFUL') {
+      return CollectionStatus.SUCCESS;
+    }
+    if (status === 'FAILED') {
+      return CollectionStatus.FAILED;
+    }
+    return CollectionStatus.PROCESSING;
   }
 
   private async findPaymentByProviderReference(providerReference: string) {
@@ -449,6 +533,73 @@ export class WebhookService {
           type: 'exponential',
           delay: 30000,
         },
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 50 },
+      },
+    );
+
+    return { dispatched: true };
+  }
+
+  async dispatchCollectionWebhook(collectionId: string) {
+    const collection = await this.prisma.collection.findUnique({
+      where: { id: collectionId },
+      include: { tenant: true },
+    });
+
+    if (!collection) {
+      return { dispatched: false, reason: 'collection not found' };
+    }
+    if (
+      collection.status !== CollectionStatus.SUCCESS &&
+      collection.status !== CollectionStatus.FAILED
+    ) {
+      return { dispatched: false, reason: 'collection still processing' };
+    }
+
+    const existingLog = await this.prisma.webhookLog.findFirst({
+      where: {
+        collectionId,
+        status: { in: [WebhookStatus.PENDING, WebhookStatus.RETRYING, WebhookStatus.SUCCESS] },
+      },
+    });
+    if (existingLog) {
+      return { dispatched: false, reason: 'webhook already attempted' };
+    }
+    if (!collection.tenant.webhookUrl) {
+      return { dispatched: false, reason: 'tenant webhook URL not configured' };
+    }
+
+    const payload = {
+      event: 'collection.completed',
+      collectionId: collection.id,
+      tenantId: collection.tenantId,
+      userPseudoId: collection.userPseudoId,
+      phone: collection.phone,
+      amount: collection.amount,
+      status: collection.status,
+      provider: collection.provider.toLowerCase(),
+      providerRef: collection.mtnRef,
+      failReason: collection.failReason,
+      timestamp: new Date().toISOString(),
+    };
+
+    const log = await this.prisma.webhookLog.create({
+      data: {
+        collectionId,
+        tenantId: collection.tenantId,
+        url: collection.tenant.webhookUrl,
+        payload,
+        status: WebhookStatus.PENDING,
+      },
+    });
+
+    await this.webhookQueue.add(
+      JOB_SEND_WEBHOOK,
+      { webhookLogId: log.id },
+      {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 30000 },
         removeOnComplete: { count: 100 },
         removeOnFail: { count: 50 },
       },

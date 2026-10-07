@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
+import { CollectionModule } from './collection/collection.module';
 import { DisbursementModule } from './disbursement/disbursement.module';
 import { HealthModule } from './health/health.module';
 import { MasterModule } from './master/master.module';
@@ -35,6 +36,7 @@ import { WebhookModule } from './webhook/webhook.module';
     AuthModule,
     AdminModule,
     TenantModule,
+    CollectionModule,
     DisbursementModule,
     WebhookModule,
     HealthModule,

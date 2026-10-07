@@ -40,7 +40,10 @@ export class WebhookXentryController {
   async receiveCallback(@Req() req: RawBodyRequest, @Body() payload: XentriPayWebhookPayload) {
     // Signature MUST be verified over the exact bytes XentriPay signed — never
     // over JSON.stringify(req.body), which can re-order/re-serialize keys.
-    const rawBody = req.rawBody ?? Buffer.from(JSON.stringify(req.body ?? {}));
+    if (!req.rawBody) {
+      throw new HttpException('Raw webhook body unavailable', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+    const rawBody = req.rawBody;
     const signature = req.headers['x-xentripay-signature'] as string;
     const eventType = req.headers['x-xentripay-event'] as string;
     const idempotencyKeyHeader = req.headers['x-xentripay-idempotency-key'] as string;

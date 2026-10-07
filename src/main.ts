@@ -8,6 +8,7 @@ import { AppModule } from './app.module';
 import { AdminCommands } from './admin/admin.commands';
 import { AuthCommands } from './auth/auth.commands';
 import { DisbursementCommands } from './disbursement/disbursement.commands';
+import { CollectionCommands } from './collection/collection.commands';
 import { TenantCommands } from './tenant/tenant.commands';
 import { HttpExceptionFilter } from './common/filters/exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -97,6 +98,19 @@ const COMMAND_REQUEST_EXAMPLES: Record<string, Record<string, unknown>> = {
   DSB_STATUS_4E5F: {
     apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
     batchId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
+  },
+  COL_INIT_8A9B: {
+    apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
+    idempotencyKey: 'collection_20261007_0001',
+    userPseudoId: 'user_abc123',
+    phone: '0781111111',
+    amount: 500,
+    customerName: 'Alice Uwase',
+    customerEmail: 'alice@example.com',
+  },
+  COL_STATUS_9C0D: {
+    apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
+    collectionId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
   },
   TNT_LSTBTCH_1A1B: {
     apiKey: 'momo_live_xxxxxxxxxxxxxxxxxxxx',
@@ -350,6 +364,25 @@ const COMMAND_RESPONSE_EXAMPLES: Record<string, Record<string, unknown>> = {
     createdAt: '2026-04-03T00:00:00.000Z',
     updatedAt: '2026-04-03T00:00:20.000Z',
   },
+  COL_INIT_8A9B: {
+    collectionId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
+    status: 'QUEUED',
+    provider: 'xentry',
+    userPseudoId: 'user_abc123',
+    phone: '0781111111',
+    amount: 500,
+    message: 'Collection accepted and queued for processing.',
+  },
+  COL_STATUS_9C0D: {
+    collectionId: '0c4b8e06-13d9-4b34-bd10-2da6a38db11d',
+    status: 'SUCCESS',
+    provider: 'xentry',
+    userPseudoId: 'user_abc123',
+    phone: '0781111111',
+    amount: 500,
+    providerRef: 'RefE1108D491A1C',
+    failReason: null,
+  },
   TNT_LSTBTCH_1A1B: {
     total: 1,
     limit: 20,
@@ -592,10 +625,12 @@ async function bootstrap() {
     const authCommands = app.get(AuthCommands, { strict: false });
     const adminCommands = app.get(AdminCommands, { strict: false });
     const disbursementCommands = app.get(DisbursementCommands, { strict: false });
+    const collectionCommands = app.get(CollectionCommands, { strict: false });
     const tenantCommands = app.get(TenantCommands, { strict: false });
     authCommands.onModuleInit();
     adminCommands.onModuleInit();
     disbursementCommands.onModuleInit();
+    collectionCommands.onModuleInit();
     tenantCommands.onModuleInit();
 
     const commandRegistry = app.get(CommandRegistry);

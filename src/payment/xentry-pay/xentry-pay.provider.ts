@@ -17,8 +17,8 @@ export class XentryPayProvider implements PaymentProvider {
     const phone = this.normalizePhone(input.phone);
 
     const response = await this.xentry.initiateCollection({
-      email: `user-${input.externalId}@example.com`,
-      cname: `User ${input.externalId}`,
+      email: input.customerEmail?.trim() || `collection-${input.externalId}@transpip.com`,
+      cname: input.customerName?.trim() || `Customer ${input.externalId}`,
       cnumber: phone.local,
       msisdn: phone.international,
       amount: input.amount,

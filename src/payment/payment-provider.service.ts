@@ -33,6 +33,14 @@ export class PaymentProviderService {
     return provider.collect(input);
   }
 
+  async collectWithProvider(
+    name: PaymentProviderName,
+    input: MoneyMovementInput,
+  ): Promise<MoneyMovementResult> {
+    await this.assertNamedProviderConfigured(name);
+    return this.providers.get(name)!.collect(input);
+  }
+
   async transfer(input: MoneyMovementInput): Promise<MoneyMovementResult> {
     const provider = await this.resolve('disbursement', input);
     return provider.transfer(input);
@@ -53,6 +61,12 @@ export class PaymentProviderService {
   ): Promise<PaymentProviderName> {
     const name = await this.routing.resolve(kind);
 
+    await this.assertNamedProviderConfigured(name);
+
+    return name;
+  }
+
+  private async assertNamedProviderConfigured(name: PaymentProviderName): Promise<void> {
     if (!this.providers.has(name)) {
       throw new BadRequestException(`Unknown payment provider: ${name}`);
     }
@@ -62,8 +76,6 @@ export class PaymentProviderService {
         'Xentry Pay provider selected but Xentry Pay is not configured. Set the API key via ADM_SETXTR_1P3R.',
       );
     }
-
-    return name;
   }
 
   private async resolve(

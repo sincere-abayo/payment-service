@@ -127,6 +127,16 @@ export type XentryErrorResponse = {
   status: number;
 };
 
+export class XentryHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'XentryHttpError';
+  }
+}
+
 @Injectable()
 export class XentryPayHelper {
   private readonly logger = new Logger(XentryPayHelper.name);
@@ -168,6 +178,7 @@ export class XentryPayHelper {
       method,
       headers: this.getHeaders(apiKey),
       body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(15_000),
     });
 
     const text = await response.text();
@@ -181,7 +192,10 @@ export class XentryPayHelper {
 
     if (!response.ok) {
       const error = parsed as XentryErrorResponse;
-      throw new Error(error.message || `XentryPay ${method} ${path} failed with status ${response.status}`);
+      throw new XentryHttpError(
+        error.message || `XentryPay ${method} ${path} failed with status ${response.status}`,
+        response.status,
+      );
     }
 
     return parsed;
@@ -192,7 +206,10 @@ export class XentryPayHelper {
   }
 
   async checkCollectionStatus(reference: string): Promise<XentryCollectionStatusResponse> {
-    return this.request<XentryCollectionStatusResponse>('GET', `/api/collections/status/${reference}`);
+    return this.request<XentryCollectionStatusResponse>(
+      'GET',
+      `/api/collections/status/${encodeURIComponent(reference)}`,
+    );
   }
 
   async initiatePayout(request: XentryPayoutRequest): Promise<XentryPayoutResponse> {

@@ -15,6 +15,9 @@ export type MoneyMovementInput = {
   recipientName?: string;
   /** Provider-specific telecom code — used by Xentry (e.g. 63510 for MTN MoMo). */
   providerCode?: string;
+  /** Collection customer identity required by providers such as Xentry. */
+  customerName?: string;
+  customerEmail?: string;
 };
 
 export type MoneyMovementResult = {
